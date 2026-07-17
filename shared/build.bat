@@ -17,4 +17,8 @@ echo Building delcache...
 "%CSC%" /nologo /optimize+ /target:exe /out:bin\delcache.exe src\delcache.cs
 if %ERRORLEVEL% NEQ 0 exit /b 1
 
+echo Building catsort...
+"%CSC%" /nologo /optimize+ /target:exe /out:bin\catsort.exe src\catsort.cs
+if %ERRORLEVEL% NEQ 0 exit /b 1
+
 echo All builds succeeded.
