@@ -207,7 +207,7 @@ class Program {
         string confPath = Path.Combine(
             Path.GetDirectoryName(
                 System.Reflection.Assembly.GetExecutingAssembly().Location),
-            "..", "conf", "threadCount");
+            "..", "conf", ".thr");
         if (!File.Exists(confPath)) return;
         int t;
         if (int.TryParse(File.ReadAllText(confPath).Trim(), out t) && t > 0)

@@ -40,7 +40,7 @@ class Program
             confPath = Path.Combine(
                 Path.GetDirectoryName(
                     System.Reflection.Assembly.GetExecutingAssembly().Location),
-                "..", "conf", "fileExts.ini");
+                "..", "conf", ".cats");
 
         if (!File.Exists(confPath))
         {

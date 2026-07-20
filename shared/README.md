@@ -18,7 +18,7 @@ delcache [path]
 
 ### Configuration
 
-**Location:** `conf/cacheDirs.ini`
+**Location:** `conf/.cdirs`
 
 One directory name per line, `#` for comments:
 
@@ -37,7 +37,7 @@ If the file is missing or empty, defaults to `__pycache__` and `node_modules`.
 
 ### How it works
 
-1. Resolves `conf/cacheDirs.ini` relative to the .exe location (`shared/bin/delcache.exe` -> `shared/conf/cacheDirs.ini`).
+1. Resolves `conf/.cdirs` relative to the .exe location (`shared/bin/delcache.exe` -> `shared/conf/.cdirs`).
 2. Reads target directory names from the file — one per line, blank lines and `#` comments ignored.
 3. For each target, calls `Directory.EnumerateDirectories(root, target, SearchOption.AllDirectories)` to find every matching subdirectory at any depth.
 4. Prints the full path of every match, numbered by count.
@@ -53,7 +53,7 @@ If the file is missing or empty, defaults to `__pycache__` and `node_modules`.
 ### Design decisions
 
 - **Why C# over Python (delpyc):** The original delpyc required Python 3.8+ and the `click` package. delcache is a standalone .exe with zero runtime dependencies — copy and run.
-- **Why always prompt:** Cache directories are safe to delete in theory, but a typo in `cacheDirs.ini` or a wrong root path can delete the wrong data. Forcing Y/N confirmation on every run ensures you see exactly what will be deleted.
+- **Why always prompt:** Cache directories are safe to delete in theory, but a typo in `.cdirs` or a wrong root path can delete the wrong data. Forcing Y/N confirmation on every run ensures you see exactly what will be deleted.
 - **Why a config file:** Adding or removing targets (node_modules, .cache, .vs) doesn't require recompilation. The config file is editable by any text editor.
 
 ### Known limitations
@@ -79,7 +79,7 @@ dirdiff [<source> <destination>]
 | `dirdiff "D:\src" "D:\dst"` | Compare the two paths directly — works on any OS |
 | `dirdiff` | Opens two Explorer-style folder pickers (Windows only) |
 
-Config file: `conf/threadCount` — contains a single number (default 8) for parallel hash threads.
+Config file: `conf/.thr` — contains a single number (default 8) for parallel hash threads.
 
 ### How it works
 
@@ -156,7 +156,7 @@ catsort [directory] [--dry-run]
 
 ### Configuration
 
-**Location:** `conf/fileExts.ini`
+**Location:** `conf/.cats`
 
 ```ini
 [Images]
@@ -184,13 +184,13 @@ ext=.bat,.cmd,.ps1,.psm1,.sh,.bash,.zsh,.vbs
 ext=.csv,.tsv,.sql,.db,.sqlite,.jsonl,.parquet
 ```
 
-Full list in [`conf/fileExts.ini`](./conf/fileExts.ini) — edit freely, no recompilation needed.
+Full list in [`conf/.cats`](./conf/.cats) — edit freely, no recompilation needed.
 
 Each [Category] section has an `ext=` line with comma-separated extensions. Add or remove categories freely — no recompilation needed.
 
 ### How it works
 
-1. Reads `conf/fileExts.ini` relative to the .exe location (`shared/bin/catsort.exe` -> `shared/conf/fileExts.ini`).
+1. Reads `conf/.cats` relative to the .exe location.
 2. Scans the target directory for files (non-recursive).
 3. For each file, matches its extension against every category.
 4. Creates the category subfolder if it doesn't exist.
@@ -227,9 +227,9 @@ reindex [directory] [--dry-run] [--rollback]
 
 Padding adjusts automatically: 1-9 files -> `01.ext`, 10-99 -> `001.ext`, etc.
 
-### catignore
+### indexignore
 
-**Location:** `conf/.catignore`
+**Location:** `conf/.indexignore`
 
 Filenames to skip during reindex, one per line (case-insensitive). Built-in defaults:
 
@@ -250,7 +250,7 @@ Only the 25 most recent logs are kept. Older logs are pruned automatically.
 
 ### How it works
 
-1. Loads ignore list from `conf/catignore`.
+1. Loads ignore list from `conf/.indexignore`.
 2. Scans the directory for files (non-recursive), sorted alphabetically, filtered by ignore list.
 3. Renames each file to a random GUID temp name (avoids collisions with final names).
 4. Renames each temp file to the sequential name.
@@ -262,7 +262,7 @@ Only the 25 most recent logs are kept. Older logs are pruned automatically.
 - **Two-phase rename (not rename-in-place):** If file `3.jpg` already exists and we want to rename `zzz.jpg` to `3.jpg`, a direct rename would overwrite. The two-phase approach (original -> guid -> final) avoids all collisions.
 - **Alphabetical order:** Provides a deterministic, reproducible sequence. Sorting by date or size would make the order depend on filesystem metadata.
 - **Rollback via logs:** Renaming is destructive — `--rollback` gives a safety net without needing a VCS or file history.
-- **catignore for system files:** Files like `desktop.ini` and `thumbs.db` shouldn't be touched. A config file keeps the list editable without recompilation.
+- **indexignore for system files:** Files like `desktop.ini` and `thumbs.db` shouldn't be touched. A config file keeps the list editable without recompilation.
 
 ### Known limitations
 
@@ -311,10 +311,10 @@ shared/
 │   ├── catsort.exe           ← compiled binary (build output)
 │   └── reindex.exe           ← compiled binary (build output)
 ├── conf/
-│   ├── threadCount           ← dirdiff parallel hash threads (default 8)
-│   ├── cacheDirs.ini         ← delcache configuration
-│   ├── fileExts.ini          ← catsort configuration
-│   ├── .catignore            ← reindex skip list
+│   ├── .thr                  ← dirdiff parallel hash threads (default 8)
+│   ├── .cdirs                ← delcache configuration
+│   ├── .cats                 ← catsort configuration
+│   ├── .indexignore          ← reindex skip list
 │   └── logs/reindex/         ← rollback history (auto, 25 newest kept)
 ├── build.bat
 └── README.md

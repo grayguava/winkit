@@ -125,7 +125,7 @@ class Program
     static HashSet<string> LoadIgnore()
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string path = Path.Combine(BaseDir(), "..", "conf", ".catignore");
+        string path = Path.Combine(BaseDir(), "..", "conf", ".indexignore");
         if (!File.Exists(path)) return set;
         foreach (string rawLine in File.ReadAllLines(path))
         {

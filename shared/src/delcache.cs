@@ -9,11 +9,11 @@ class Program {
 
         string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         string confDir = Path.GetFullPath(Path.Combine(exeDir, "..", "conf"));
-        string configPath = Path.Combine(confDir, "cacheDirs.ini");
+        string configPath = Path.Combine(confDir, ".cdirs");
 
         var targets = LoadTargets(configPath);
         if (targets.Count == 0) {
-            Console.Error.WriteLine("No targets configured in cacheDirs.ini");
+            Console.Error.WriteLine("No targets configured in conf/.cdirs");
             return;
         }
 
