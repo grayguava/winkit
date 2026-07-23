@@ -94,7 +94,7 @@ chkdsk D: /scan
 ; smartctl -x /dev/sda
 ```
 
-The first word of each line is the executable, the rest are its arguments. Section names determine how the parser interprets output:
+The first word of each line is the executable, the rest are its arguments. Only `fsutil`, `chkdsk`, and `smartctl` are accepted as executables; argument strings are sanitized against shell metacharacters. Invalid entries are silently skipped. Section names determine how the parser interprets output:
 - `[fsutil]` — dirty bit check via fsutil. Drive letter extracted from output.
 - `[chkdsk]` — read-only filesystem scan. Drive letter extracted from output.
 - `[smartctl]` — SMART data. Device keyed by section+index.

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 class Program
 {
@@ -84,6 +85,20 @@ class Program
         return 0;
     }
 
+    static bool IsAllowedExe(string exe)
+    {
+        if (string.IsNullOrWhiteSpace(exe)) return false;
+        string name = exe.Trim().ToLowerInvariant();
+        return name == "fsutil" || name == "chkdsk" || name == "smartctl";
+    }
+
+    static bool IsSafeArgs(string args)
+    {
+        if (args == null) return false;
+        if (args.IndexOfAny(new char[] { '\r', '\n', ';', '|', '&', '>', '<', '$' }) >= 0) return false;
+        return Regex.IsMatch(args, @"^[A-Za-z0-9\s\.\-_:\/\\,""'=\+\(\)\[\]\*%]*$");
+    }
+
     static List<Command> LoadCommands(string path)
     {
         var commands = new List<Command>();
@@ -102,6 +117,8 @@ class Program
             int sep = line.IndexOf(' ');
             string exe = sep > 0 ? line.Substring(0, sep) : line;
             string args = sep > 0 ? line.Substring(sep + 1) : "";
+            if (!IsAllowedExe(exe)) continue;
+            if (!IsSafeArgs(args)) continue;
             string suffix = MakeSuffix(args);
             commands.Add(new Command { Name = section + "_" + suffix, Exe = exe, Args = args });
         }
