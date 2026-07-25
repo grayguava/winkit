@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Windows.Forms
 
 if ($MyInvocation.MyCommand.Path) {
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -27,16 +27,16 @@ function Write-Log {
         New-Item -ItemType Directory -Path $script:logDir | Out-Null
     }
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-    $script:logFile = Join-Path $script:logDir ("clean_" + $timestamp + ".log")
+    $script:logFile = Join-Path $script:logDir ("date_" + $timestamp + ".log")
     $header = @(
-        "ExifTool Metadata Clean Log"
+        "ExifTool Date Set Log"
         "Timestamp : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         "Outcome   : $outcome"
         "----------------------------------------"
         ""
     )
     $header + $script:logLines | Set-Content -Path $script:logFile -Encoding UTF8
-    $allLogs = Get-ChildItem -Path $script:logDir -Filter "clean_*.log" |
+    $allLogs = Get-ChildItem -Path $script:logDir -Filter "date_*.log" |
                Sort-Object Name -Descending
     if ($allLogs.Count -gt 10) {
         $allLogs | Select-Object -Skip 10 | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -90,7 +90,7 @@ $version = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exiftool).FileV
 # --- UI: header ---
 
 Write-Host ""
-Write-Host (" " + [string][char]0x250C + $H + " 🐾 ETSU   |   Clean   |   Exiftool: v$version")
+Write-Host (" " + [string][char]0x250C + $H + " 🐾 ETSU   |   Date   |   Exiftool: v$version")
 Write-Host (" " + $H * 46) -ForegroundColor DarkGray
 Write-Host ""
 
@@ -106,8 +106,8 @@ if ($openFiles -notmatch "^[Yy]$") {
 
 $dialog             = New-Object System.Windows.Forms.OpenFileDialog
 $dialog.Multiselect = $true
-$dialog.Title       = "Select files to strip metadata from"
-$dialog.Filter      = "Supported Files|*.jpg;*.jpeg;*.png;*.webp;*.heic;*.tif;*.tiff;*.mp4;*.mov;*.pdf|All Files|*.*"
+$dialog.Title       = "Select files to set date on"
+$dialog.Filter      = "All Files|*.*"
 
 if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
     Exit-Script -outcome "ABORT: no files selected" -skipLog
@@ -128,14 +128,26 @@ Write-Host ""
 Write-Host (" " + $H * 46) -ForegroundColor DarkGray
 Write-Host ""
 
+# --- date input ---
+
+$dateInput = Read-Host "  Enter date (YYYY:MM:DD HH:MM:SS)"
+$dateInput = $dateInput.Trim()
+if (-not $dateInput) {
+    Exit-Script -outcome "ABORT: no date entered" -skipLog
+}
+
+Add-Log "Target date: $dateInput"
+Write-Host "  Target date: $dateInput" -ForegroundColor DarkGray
+Write-Host ""
+
 # --- Stage 1: Copy to temp ---
 
 $tempDir = Join-Path $scriptDir ("_exiftool_tmp_" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $tempDir | Out-Null
 
-Write-Step 1 5 "Copying files to temp workspace..." ""
+Write-Step 1 4 "Copying files to temp workspace..." ""
 Add-Log ""
-Add-Log "[1/5] Copying files to temp workspace"
+Add-Log "[1/4] Copying files to temp workspace"
 
 $fileMap = @{}
 $index = 0
@@ -168,24 +180,24 @@ foreach ($file in $files) {
 
 Add-Log "All copies verified OK"
 
-# --- Stage 2: Clean metadata ---
+# --- Stage 2: Set date ---
 
-Write-Step 2 5 "Cleaning metadata..." ""
+Write-Step 2 4 "Setting date on files..." ""
 Add-Log ""
-Add-Log "[2/5] Cleaning metadata"
+Add-Log "[2/4] Setting date: $dateInput"
 
 foreach ($file in $files) {
     $fileName = [System.IO.Path]::GetFileName($file)
     $tempFile = $fileMap[$file]
 
-    $rawOutput = & $exiftool "-all=" "-overwrite_original" "-P" "-v" $tempFile 2>&1
+    $rawOutput = & $exiftool "-AllDates=$dateInput" "-FileModifyDate=$dateInput" "-FileCreateDate=$dateInput" "-overwrite_original" "-P" $tempFile 2>&1
     $exitCode  = $LASTEXITCODE
 
     if ($exitCode -ne 0) {
         Write-Host "  [ABORT] ExifTool failed on $fileName" -ForegroundColor Red
         Add-Log "[ABORT] ExifTool failed on $file"
         foreach ($line in $rawOutput) {
-            if ($line.Trim() -ne "") {
+            if ("$line".Trim() -ne "") {
                 Write-Host "    $line" -ForegroundColor DarkGray
                 Add-Log "  $line"
             }
@@ -194,25 +206,15 @@ foreach ($file in $files) {
         Exit-Script -outcome "ABORT: ExifTool failed on $fileName"
     }
 
-    $deleted = $rawOutput |
-        Where-Object { $_ -match "^\s+Deleting\s+(.+)$" } |
-        ForEach-Object { $matches[1].Trim() }
-
-    Add-Log "  $file"
-    if ($deleted.Count -gt 0) {
-        foreach ($tag in $deleted) {
-            Add-Log "    - $tag"
-        }
-    } else {
-        Add-Log "    (no metadata found)"
-    }
+    Add-Log "  Set OK: $fileName"
+    Write-Host "    $fileName" -ForegroundColor DarkGray
 }
 
 # --- Stage 3: Verify ---
 
-Write-Step 3 5 "Verifying cleaned files..." ""
+Write-Step 3 4 "Verifying files..." ""
 Add-Log ""
-Add-Log "[3/5] Verifying cleaned files"
+Add-Log "[3/4] Verifying files"
 
 foreach ($file in $files) {
     $fileName = [System.IO.Path]::GetFileName($file)
@@ -220,14 +222,14 @@ foreach ($file in $files) {
 
     if (!(Test-Path $tempFile)) {
         Write-Host "  [ABORT] Temp file missing: $fileName" -ForegroundColor Red
-        Add-Log "[ABORT] Temp file missing after wipe: $file"
+        Add-Log "[ABORT] Temp file missing after processing: $file"
         Remove-Item $tempDir -Recurse -Force
         Exit-Script -outcome "ABORT: temp file missing for $fileName"
     }
 
     if ((Get-Item $tempFile).Length -eq 0) {
         Write-Host "  [ABORT] Temp file is empty: $fileName" -ForegroundColor Red
-        Add-Log "[ABORT] Temp file is empty after wipe: $file"
+        Add-Log "[ABORT] Temp file is empty after processing: $file"
         Remove-Item $tempDir -Recurse -Force
         Exit-Script -outcome "ABORT: temp file empty for $fileName"
     }
@@ -237,19 +239,19 @@ foreach ($file in $files) {
         $stream.Close()
     } catch {
         Write-Host "  [ABORT] Temp file unreadable: $fileName" -ForegroundColor Red
-        Add-Log "[ABORT] Temp file unreadable after wipe: $file"
+        Add-Log "[ABORT] Temp file unreadable after processing: $file"
         Remove-Item $tempDir -Recurse -Force
         Exit-Script -outcome "ABORT: temp file unreadable for $fileName"
     }
 }
 
-Add-Log "All wiped files verified OK"
+Add-Log "All processed files verified OK"
 
 # --- Stage 4: Swap ---
 
-Write-Step 4 5 "Replacing originals..." ""
+Write-Step 4 4 "Replacing originals..." ""
 Add-Log ""
-Add-Log "[4/5] Replacing originals"
+Add-Log "[4/4] Replacing originals"
 
 $bakFiles = @()
 
@@ -304,10 +306,9 @@ foreach ($bak in $bakFiles) {
 Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 
 Add-Log ""
-Add-Log "All done. $($files.Count) file(s) cleaned in place."
+Add-Log "All done. $($files.Count) file(s) date set in place."
 
-# --- Stage 5: Done ---
-
-Write-Step 5 5 "Done!" " - $($files.Count) file(s) cleaned in place."
+Write-Host ""
+Write-Host "  Done! $($files.Count) file(s) date set in place." -ForegroundColor DarkGray
 
 Exit-Script -outcome "SUCCESS"

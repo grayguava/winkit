@@ -1,34 +1,50 @@
 # etsu — ExifTool Simple Use
 
-- **Language:** PowerShell (no modules required)
-- **Role:** Two interactive tools built around `exiftool` — one for **reading** metadata, one for **cleaning** it.
+- **Language:** PowerShell (no modules required), C# binary in `shared/bin/etsu.exe`
+- **Role:** Interactive tools built around `exiftool` — **read**, **clean**, and **date** subcommands.
 
 ---
 
 ## Tools
 
-### read.ps1 — metadata viewer
+### date — date setter
 
-Displays all metadata from a single file in a styled, color-coded layout.
+Sets DateTimeOriginal, CreateDate, ModifyDate, FileModifyDate, and FileCreateDate on one or more files to a user-specified value using `exiftool -AllDates -FileModifyDate -FileCreateDate`.
 
 ```
-powershell -ExecutionPolicy Bypass -File read.ps1
+etsu date                          C# binary (recommended)
+powershell -ExecutionPolicy Bypass -File date.ps1    PS1 original
+```
+
+1. Opens a multi-file picker.
+2. Prompts for a date in `YYYY:MM:DD HH:MM:SS` format.
+3. Copies files to a temp workspace, runs `ExifTool` on each, verifies, then swaps originals with full rollback on failure.
+4. Logs to `logs/date_*.log` with 10-log rotation.
+
+### read — metadata viewer
+
+Displays all metadata from a single file in a styled layout.
+
+```
+etsu read                          C# binary (recommended)
+powershell -ExecutionPolicy Bypass -File read.ps1    PS1 original
 ```
 
 The tool:
 1. Detects `exiftool.exe` on PATH (falls back to local `exiftool.exe`).
 2. Shows a styled header with the detected version.
 3. Prompts to open a file picker — single file only.
-4. Displays every tag returned by `exiftool`, with labels in default white and values dimmed.
+4. Displays every tag returned by `exiftool`.
 
 No logging, no multi-file support.
 
-### clean.ps1 — metadata stripper
+### clean — metadata stripper
 
 Strips EXIF/IPTC/XMP/metadata from images, videos, and PDFs with full safety guarantees.
 
 ```
-powershell -ExecutionPolicy Bypass -File clean.ps1
+etsu clean                         C# binary (recommended)
+powershell -ExecutionPolicy Bypass -File clean.ps1   PS1 original
 ```
 
 The tool:
@@ -49,7 +65,7 @@ Pressing `n` at the file picker prompt, or closing the file dialog without selec
 
 ## Common features
 
-Both tools share the same UI style:
+All tools share the same UI style:
 
 ```
  ┌─ 🐾 ETSU   |   Read   |   Exiftool: vX.X.X
@@ -79,20 +95,21 @@ Both tools share the same UI style:
 
 ---
 
-## Logging (clean.ps1 only)
+## Logging
 
-Each clean run produces a timestamped log in `logs/`:
+Both `clean.ps1` and `date.ps1` produce timestamped logs in `logs/`:
 
 ```
 logs/
   clean_20260713_212950.log
   clean_20260713_213100.log
+  date_20260723_153000.log
   ...
 ```
 
-Only successful processing runs (files were selected and work began) produce a log. Cancelled runs do not. Logs are rotated — the 10 most recent are kept.
+Only successful processing runs (files were selected and work began) produce a log. Cancelled runs do not. Logs are rotated — the 10 most recent per prefix are kept.
 
-### Log format
+### Log format (clean.ps1)
 
 ```
 ExifTool Metadata Clean Log
@@ -115,6 +132,33 @@ Files selected (3):
     - IPTC
   ...
 All done. 3 file(s) cleaned in place.
+```
+
+### Log format (date.ps1)
+
+```
+ExifTool Date Set Log
+Timestamp : 2026-07-23 15:30:00
+Outcome   : SUCCESS
+----------------------------------------
+
+ExifTool path: D:\exiftool\exiftool.exe
+ExifTool version: 12.92
+Files selected (2):
+  D:\pics\photo1.jpg
+  D:\pics\photo2.jpg
+Target date: 2026:01:15 14:30:00
+
+[1/4] Copying files to temp workspace
+  ...
+[2/4] Setting date: 2026:01:15 14:30:00
+  Set OK: photo1.jpg (EXIF + FS timestamps)
+  Set OK: photo2.jpg (EXIF + FS timestamps)
+[3/4] Verifying files
+  ...
+[4/4] Replacing originals
+  ...
+All done. 2 file(s) date set in place.
 ```
 
 ---
@@ -143,10 +187,12 @@ Writing a log for every cancelled or mis-typed prompt would clutter the log dire
 
 ```
 etsu/
-├── clean.ps1         ← metadata stripper
-├── read.ps1          ← metadata viewer
-├── logs/             ← auto-created (clean only), holds last 10 logs
-└── README.md
+├── clean.ps1         ← metadata stripper (PS1 original, kept for reference)
+├── date.ps1          ← date setter (PS1 original, kept for reference)
+├── read.ps1          ← metadata viewer (PS1 original, kept for reference)
+├── logs/             ← auto-created, holds last 10 logs per tool
+├── README.md
+└── (shared/bin/etsu.exe)  ← C# port, all three tools in one binary
 ```
 
 ---
@@ -159,13 +205,15 @@ etsu/
 | exiftool | Required on PATH or in `etsu/` directory |
 | File dialog | Native Windows Explorer (via WinForms) |
 | Log format | Plain text UTF-8, append-only |
-| Log retention | Last 10 logs, auto-rotated (clean.ps1 only) |
+| Log retention | Last 10 logs per prefix, auto-rotated (clean.ps1, date.ps1) |
 
 ## Known limitations
 
 - **Windows-only** — the WinForms file dialog via `Add-Type` won't work on non-Windows systems.
-- **PowerShell required** — not a standalone executable. Must be invoked via `powershell -ExecutionPolicy Bypass`.
+- **C# binary** (`shared/bin/etsu.exe`) or **PowerShell** scripts (`etsu/*.ps1`) — both work; C# is recommended for faster startup.
 - **clean.ps1: Sequential processing** — files are processed one at a time. No parallel metadata stripping.
 - **clean.ps1: No dry-run mode** — there is no preview of what metadata will be deleted before committing.
+- **date.ps1: No offset support** — all files get the same timestamp. No per-file timezone or offset adjustment.
+- **date.ps1: FileAccessDate unchanged** — exiftool sets FileCreateDate and FileModifyDate but not FileAccessDate by default. Access time is a NTFS property, not typically meaningful for media files.
 - **read.ps1: Single file only** — one file per invocation.
 - **exiftool must be on PATH or local** — no automatic download or bundled binary.

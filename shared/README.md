@@ -272,13 +272,37 @@ Only the 25 most recent logs are kept. Older logs are pruned automatically.
 
 ---
 
+## etsu — ExifTool Simple Use
+
+CLI frontend for exiftool with three subcommands.
+
+```
+etsu read       Open a single file and display all metadata
+etsu clean      Strip EXIF/IPTC/XMP from multiple files with rollback safety
+etsu date       Set EXIF dates + filesystem timestamps on multiple files
+```
+
+Requires `exiftool.exe` on PATH or in the same directory as the binary.
+
+### etsu read
+
+Opens a single-file picker, runs `exiftool` on the selection, and prints all tags.
+
+### etsu clean
+
+Multi-file picker, copies to a temp workspace, runs `exiftool -all= -overwrite_original -P`, verifies integrity, then swaps originals with `.bak` rollback on any failure. Logs to `logs/clean_*.log`.
+
+### etsu date
+
+Multi-file picker, prompts for a date (`YYYY:MM:DD HH:MM:SS`), runs `exiftool -AllDates= -FileModifyDate= -FileCreateDate=`, verifies, swaps with rollback. Logs to `logs/date_*.log`.
+
 ## PATH setup
 
 ```
 setx PATH "%PATH%;D:\DevEnv\custom_utils\shared\bin"
 ```
 
-One entry covers delcache, dirdiff, catsort, reindex, and any future CLI tools added to `shared/bin/`. Restart your terminal after setting.
+One entry covers delcache, dirdiff, catsort, reindex, etsu, and any future CLI tools added to `shared/bin/`. Restart your terminal after setting.
 
 ---
 
@@ -304,12 +328,18 @@ shared/
 │   ├── dirdiff.cs           ← source (edit this)
 │   ├── delcache.cs          ← source (edit this)
 │   ├── catsort.cs           ← source (edit this)
-│   └── reindex.cs           ← source (edit this)
+│   ├── reindex.cs           ← source (edit this)
+│   └── etsu/
+│       ├── etsu.cs          ← main entry + shared helpers
+│       ├── read.cs           ← metadata viewer
+│       ├── clean.cs          ← metadata stripper
+│       └── date.cs           ← date setter
 ├── bin/
 │   ├── dirdiff.exe           ← compiled binary (build output)
 │   ├── delcache.exe          ← compiled binary (build output)
 │   ├── catsort.exe           ← compiled binary (build output)
-│   └── reindex.exe           ← compiled binary (build output)
+│   ├── reindex.exe           ← compiled binary (build output)
+│   └── etsu.exe              ← compiled binary (build output)
 ├── conf/
 │   ├── .thr                  ← dirdiff parallel hash threads (default 8)
 │   ├── .cdirs                ← delcache configuration
@@ -335,9 +365,9 @@ For 32-bit Windows, edit `build.bat` to use `C:\Windows\Microsoft.NET\Framework\
 
 ## Compatibility
 
-| Aspect | delcache | dirdiff | catsort | reindex |
-|---|---|---|---|---|---|
-| OS | Windows 7+ | Windows 7+ | Windows 7+ | Windows 7+ |
-| .NET version | .NET Framework 4.0 | .NET Framework 4.0 | .NET Framework 4.0 | .NET Framework 4.0 |
-| Dependencies | None | `System.Windows.Forms.dll` | None | None |
-| Architecture | x64 | x64 | x64 | x64 |
+| Aspect | delcache | dirdiff | catsort | reindex | etsu |
+|---|---|---|---|---|---|---|
+| OS | Windows 7+ | Windows 7+ | Windows 7+ | Windows 7+ | Windows 7+ |
+| .NET version | .NET 4.0 | .NET 4.0 | .NET 4.0 | .NET 4.0 | .NET 4.0 |
+| Dependencies | None | `System.Windows.Forms` | None | None | `System.Windows.Forms` + exiftool |
+| Architecture | x64 | x64 | x64 | x64 | x64 |

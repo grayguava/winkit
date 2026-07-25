@@ -25,4 +25,8 @@ echo Building reindex...
 "%CSC%" /nologo /optimize+ /target:exe /out:bin\reindex.exe src\reindex.cs
 if %ERRORLEVEL% NEQ 0 exit /b 1
 
+echo Building etsu...
+"%CSC%" /nologo /optimize+ /reference:System.Windows.Forms.dll /target:exe /out:bin\etsu.exe src\etsu\*.cs
+if %ERRORLEVEL% NEQ 0 exit /b 1
+
 echo All builds succeeded.

@@ -8,8 +8,7 @@ A collection of small Windows utilities, each built to solve one specific recurr
 |---|---|---|---|
 | [wallswitch/](wallswitch/README.md) | C# | Yes | Wallpaper randomizer with shuffle queue. |
 | [kdbx-backup/](kdbx-backup/README.md) | C# | Yes | KeePass backup pipeline with watcher daemon + rclone push. |
-| shared/ | C# | Yes | Portable CLI tool collection (delcache, dirdiff, catsort, reindex). One PATH entry for all. See [README](shared/README.md). |
-| [etsu/](etsu/README.md) | PowerShell | No | simple ExifTool frontends: read metadata, strip EXIF/IPTC/XMP |
+| shared/ | C# | Yes | Portable CLI tool collection (delcache, dirdiff, catsort, reindex, etsu). One PATH entry for all. See [README](shared/README.md). |
 | [diskwatch/](diskwatch/README.md) | C# | Yes | Read-only disk health monitor with change detection and popup alerts. |
 | [batcap/](batcap/README.md) | C# | Yes | Battery capacity logger via WMI, appends to logs/batcap.log. |
 | [archive/](archive/README.md) | — | — | Retired tools, kept for reference only. |
