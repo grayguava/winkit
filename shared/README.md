@@ -79,7 +79,7 @@ dirdiff [<source> <destination>]
 | `dirdiff "D:\src" "D:\dst"` | Compare the two paths directly — works on any OS |
 | `dirdiff` | Opens two Explorer-style folder pickers (Windows only) |
 
-Config file: `conf/.thr` — contains a single number (default 8) for parallel hash threads.
+Config file: `conf/.thr` — contains a single number (default 8, max 32) for parallel hash threads. Cap prevents accidental CPU thrashing from unreasonably high values.
 
 ### How it works
 

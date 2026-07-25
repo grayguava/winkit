@@ -211,7 +211,7 @@ class Program {
         if (!File.Exists(confPath)) return;
         int t;
         if (int.TryParse(File.ReadAllText(confPath).Trim(), out t) && t > 0)
-            MaxThreads = t;
+            MaxThreads = Math.Min(t, 32);
     }
 
     const int ChunkSize = 1024 * 1024;
