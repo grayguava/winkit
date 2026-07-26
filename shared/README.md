@@ -4,297 +4,15 @@ Single directory housing all portable CLI tools. One `bin/` for PATH, one `conf/
 
 Each tool is fully independent — removing one .exe and its config file won't affect any other tool in the directory. The entire shared/ folder is portable: copy it anywhere, add its `bin/` to PATH, and all tools work.
 
----
+## Tools
 
-## delcache
-
-Finds and deletes cache/temp directories (`__pycache__`, `node_modules`, etc.) by recursively scanning a root path and matching directory names against a config file.
-
-```
-delcache [path]
-```
-
-- **path** — root directory to search (default: current directory)
-
-### Configuration
-
-**Location:** `conf/.cdirs`
-
-One directory name per line, `#` for comments:
-
-```ini
-__pycache__
-node_modules
-.bazel
-.cache
-.vs
-```
-
-If the file is missing or empty, defaults to `__pycache__` and `node_modules`.
-
-> [!WARNING]
-> A typo or malicious entry can cause data loss. Always read the found list before typing y.
-
-### How it works
-
-1. Resolves `conf/.cdirs` relative to the .exe location (`shared/bin/delcache.exe` -> `shared/conf/.cdirs`).
-2. Reads target directory names from the file — one per line, blank lines and `#` comments ignored.
-3. For each target, calls `Directory.EnumerateDirectories(root, target, SearchOption.AllDirectories)` to find every matching subdirectory at any depth.
-4. Prints the full path of every match, numbered by count.
-5. Prompts [y/N] — only proceeds on explicit y or yes.
-6. Iterates the list and deletes each directory with `Directory.Delete(path, true)`.
-7. Reports success count and prints failures to stderr (permission errors, locked files).
-
-**Error handling:**
-- Directories that can't be read during search (permission denied) are silently skipped.
-- Directories that fail to delete are logged to stderr with the reason; remaining deletions continue.
-- If the root path doesn't exist, prints an error and exits.
-
-### Design decisions
-
-- **Why C# over Python (delpyc):** The original delpyc required Python 3.8+ and the `click` package. delcache is a standalone .exe with zero runtime dependencies — copy and run.
-- **Why always prompt:** Cache directories are safe to delete in theory, but a typo in `.cdirs` or a wrong root path can delete the wrong data. Forcing Y/N confirmation on every run ensures you see exactly what will be deleted.
-- **Why a config file:** Adding or removing targets (node_modules, .cache, .vs) doesn't require recompilation. The config file is editable by any text editor.
-
-### Known limitations
-
-- No exclusions — you can't skip specific paths within a single run.
-- No parallel deletion — directories are removed sequentially.
-- Follows symlinks — `SearchOption.AllDirectories` traverses junctions and symlinks.
-
----
-
-## dirdiff
-
-Compares two directories by filename, size, and SHA256. Opens native Explorer-style folder pickers and prints a detailed report.
-
-```
-dirdiff [<source> <destination>]
-```
-
-### Modes
-
-| Args | Behavior |
-|---|---|
-| `dirdiff "D:\src" "D:\dst"` | Compare the two paths directly — works on any OS |
-| `dirdiff` | Opens two Explorer-style folder pickers (Windows only) |
-
-Config file: `conf/.thr` — contains a single number (default 8, max 32) for parallel hash threads. Cap prevents accidental CPU thrashing from unreasonably high values.
-
-### How it works
-
-#### Source and destination
-
-If two arguments are provided, they're used directly as source and destination paths — this works on any OS. If no arguments are given (Windows only), two Explorer-style folder pickers pop up sequentially using `OpenFileDialog` with `ValidateNames = false` and `CheckFileExists = false` — the same trick the old Python version used through PowerShell, but called directly from C# without a subprocess.
-
-#### Directory scanning
-
-`Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)` recursively walks each selected directory. Each file's relative path is computed by stripping the root prefix. Files that can't be stat'd (permission, locked) are silently skipped.
-
-#### Three comparisons
-
-| Check | Method | What's reported |
+| Tool | Description | Docs |
 |---|---|---|
-| **Presence** | `HashSet` difference on relative paths | Missing (in source only) and extra (in dest only) files |
-| **Size** | `FileInfo.Length` comparison | Path + both byte counts when they differ |
-| **SHA256** | `Parallel.ForEach` (8 threads), 1 MB chunks | Count of mismatched or unreadable files |
-
-#### Example output
-
-```
-  ================================================
-  Directory Comparison Report
-  ================================================
-
-  Source:      D:\source
-  Dest:        D:\dest
-
-  Files present:      957 / 959        ( 99.8%)
-
-  Missing files (2):
-
-    - file_a.txt
-    - file_b.txt
-
-  Sizes matched:      957 / 957        (100.0%)
-
-  Computing SHA256 hashes (957/957)
-
-  Hashes matched:     957 / 957        (100.0%)
-
-  All 959 files verified OK.
-```
-
-### Design decisions
-
-- **Why C# over Python:** The original Python dirdiff launched a PowerShell subprocess to show a folder picker. That meant two runtimes (Python + PowerShell) and a fragile command-line construction. C# calls `System.Windows.Forms.OpenFileDialog` directly — no subprocess, no runtime dependencies.
-- **Why a folder picker instead of CLI arguments:** Directory comparison is inherently interactive. A folder dialog is faster, eliminates typos, and shows the actual filesystem tree.
-- **Why parallel hashing:** SHA256 of large files is CPU-bound. Hashing sequentially can take minutes for many large files. `Parallel.ForEach` with 8 threads saturates modern CPUs.
-- **Why OpenFileDialog repurposed as a folder picker:** The classic `FolderBrowserDialog` is an XP-era tree widget with no address bar, search, or quick access. The OpenFileDialog trick gives the full modern Explorer dialog.
-
-### Known limitations
-
-- No single-file diff — only presence/size/hash comparison, no line-by-line diff.
-- No filtering — all files are included. Use `dirdiff | grep` at the shell level.
-- In-memory file map — directories with millions of files will use significant memory.
-- Hash progress counter is approximate — files complete in non-deterministic order.
-
----
-
-## catsort
-
-Sorts files into category folders by extension. Copies each matched file into its category subfolder, verifies the copy via SHA256, then deletes the original. Unmatched files are left untouched.
-
-```
-catsort [directory] [--dry-run]
-```
-
-| Arg | Default | Description |
-|---|---|---|
-| `directory` | current dir | Directory to scan and sort |
-| `--dry-run` / `-n` | off | Preview only — no copies or deletes |
-
-### Configuration
-
-**Location:** `conf/.cats`
-
-```ini
-[Images]
-ext=.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.ico,.avif,.heic
-
-[Videos]
-ext=.mp4,.mkv,.avi,.mov,.wmv,.flv,.webm,.m4v,.mpg,.mpeg
-
-[Documents]
-ext=.pdf,.doc,.docx,.txt,.md,.rtf,.odt,.odp,.epub,.tex
-
-[Code]
-ext=.cs,.rs,.py,.js,.ts,.java,.cpp,.c,.go,.rb,.php,.swift,.kt,.lua,.pl,.zig
-
-[Web]
-ext=.html,.htm,.css,.scss,.less,.jsx,.tsx,.vue,.svelte,.astro
-
-[Config]
-ext=.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.env,.gitignore
-
-[Scripts]
-ext=.bat,.cmd,.ps1,.psm1,.sh,.bash,.zsh,.vbs
-
-[Data]
-ext=.csv,.tsv,.sql,.db,.sqlite,.jsonl,.parquet
-```
-
-Full list in [`conf/.cats`](./conf/.cats) — edit freely, no recompilation needed.
-
-Each [Category] section has an `ext=` line with comma-separated extensions. Add or remove categories freely — no recompilation needed.
-
-### How it works
-
-1. Reads `conf/.cats` relative to the .exe location.
-2. Scans the target directory for files (non-recursive).
-3. For each file, matches its extension against every category.
-4. Creates the category subfolder if it doesn't exist.
-5. Copies the file into the category folder.
-6. Computes SHA256 of both original and copy — if they match, deletes the original.
-7. Reports moved count, verified count, and any failures.
-
-### Design decisions
-
-- **Copy then delete (not move):** Moving preserves the file but doesn't verify the destination is readable. Copy-verify-delete ensures the file landed intact before removing the source.
-- **SHA256 verification:** Catches silent corruption from disk errors or copy failures. The hash is computed on both sides and compared byte-by-byte.
-- **Non-recursive by design:** Sorting is typically a one-time cleanup for a flat download folder. Recursive sorting would also move files within already-sorted subfolders, creating confusion.
-
-### Known limitations
-
-- No recursion — subdirectories are not scanned.
-- Overwrite prevention — if a file with the same name already exists in the target category folder, it's skipped with a notice (original left in place).
-
----
-
-## reindex
-
-Reindexes all files in a directory to sequential numbers (01.jpg, 02.png, 03.pdf, etc.) while preserving extensions. Handles collisions by renaming through temp GUIDs — safe to run on directories with existing numbered files.
-
-```
-reindex [directory] [--dry-run] [--rollback]
-```
-
-| Arg | Default | Description |
-|---|---|---|
-| `directory` | current dir | Directory whose files to rename |
-| `--dry-run` / `-n` | off | Preview only — no actual renames |
-| `--rollback` / `-r` | off | Revert the most recent reindex in the target directory |
-
-Padding adjusts automatically: 1-9 files -> `01.ext`, 10-99 -> `001.ext`, etc.
-
-### indexignore
-
-**Location:** `conf/.indexignore`
-
-Filenames to skip during reindex, one per line (case-insensitive). Built-in defaults:
-
-```ini
-desktop.ini
-thumbs.db
-.ds_store
-folder.jpg
-```
-
-Lines starting with `#` or `;` are comments.
-
-### Rollback
-
-Every successful reindex saves a log to `logs/reindex/<timestamp>.txt` with the original directory and each original → final mapping. `--rollback` reads the most recent log and reverses the rename using the same two-phase temp-GUID approach.
-
-Only the 25 most recent logs are kept. Older logs are pruned automatically.
-
-### How it works
-
-1. Loads ignore list from `conf/.indexignore`.
-2. Scans the directory for files (non-recursive), sorted alphabetically, filtered by ignore list.
-3. Renames each file to a random GUID temp name (avoids collisions with final names).
-4. Renames each temp file to the sequential name.
-5. Writes a rollback log to `logs/reindex/`.
-6. If any step fails, temp files are cleaned up and originals are preserved.
-
-### Design decisions
-
-- **Two-phase rename (not rename-in-place):** If file `3.jpg` already exists and we want to rename `zzz.jpg` to `3.jpg`, a direct rename would overwrite. The two-phase approach (original -> guid -> final) avoids all collisions.
-- **Alphabetical order:** Provides a deterministic, reproducible sequence. Sorting by date or size would make the order depend on filesystem metadata.
-- **Rollback via logs:** Renaming is destructive — `--rollback` gives a safety net without needing a VCS or file history.
-- **indexignore for system files:** Files like `desktop.ini` and `thumbs.db` shouldn't be touched. A config file keeps the list editable without recompilation.
-
-### Known limitations
-
-- No recursion — only files in the specified directory.
-- Order is alphabetical by filename — not by any other property.
-- Rollback only works if the log file still exists (25-log rotation).
-
----
-
-## etsu — ExifTool Simple Use
-
-CLI frontend for exiftool with three subcommands.
-
-```
-etsu read       Open a single file and display all metadata
-etsu clean      Strip EXIF/IPTC/XMP from multiple files with rollback safety
-etsu date       Set EXIF dates + filesystem timestamps on multiple files
-```
-
-Requires `exiftool.exe` on PATH or in the same directory as the binary.
-
-### etsu read
-
-Opens a single-file picker, runs `exiftool` on the selection, and prints all tags.
-
-### etsu clean
-
-Multi-file picker, copies to a temp workspace, runs `exiftool -all= -overwrite_original -P`, verifies integrity, then swaps originals with `.bak` rollback on any failure. Logs to `logs/clean_*.log`.
-
-### etsu date
-
-Multi-file picker, prompts for a date (`YYYY:MM:DD HH:MM:SS`), runs `exiftool -AllDates= -FileModifyDate= -FileCreateDate=`, verifies, swaps with rollback. Logs to `logs/date_*.log`.
+| **delcache** | Recursive cache directory cleanup | [docs/delcache.md](docs/delcache.md) |
+| **dirdiff** | Directory comparison (presence, size, SHA256) | [docs/dirdiff.md](docs/dirdiff.md) |
+| **catsort** | Category-based file sorting by extension | [docs/catsort.md](docs/catsort.md) |
+| **reindex** | Sequential file renaming with rollback | [docs/reindex.md](docs/reindex.md) |
+| **etsu** | ExifTool frontend (read, clean, date) | [docs/etsu.md](docs/etsu.md) |
 
 ## PATH setup
 
@@ -302,9 +20,7 @@ Multi-file picker, prompts for a date (`YYYY:MM:DD HH:MM:SS`), runs `exiftool -A
 setx PATH "%PATH%;D:\DevEnv\custom_utils\shared\bin"
 ```
 
-One entry covers delcache, dirdiff, catsort, reindex, etsu, and any future CLI tools added to `shared/bin/`. Restart your terminal after setting.
-
----
+One entry covers all tools. Restart your terminal after setting.
 
 ## Building
 
@@ -335,17 +51,23 @@ shared/
 │       ├── clean.cs          ← metadata stripper
 │       └── date.cs           ← date setter
 ├── bin/
-│   ├── dirdiff.exe           ← compiled binary (build output)
-│   ├── delcache.exe          ← compiled binary (build output)
-│   ├── catsort.exe           ← compiled binary (build output)
-│   ├── reindex.exe           ← compiled binary (build output)
-│   └── etsu.exe              ← compiled binary (build output)
+│   ├── dirdiff.exe          ← compiled binary (build output)
+│   ├── delcache.exe         ← compiled binary (build output)
+│   ├── catsort.exe          ← compiled binary (build output)
+│   ├── reindex.exe          ← compiled binary (build output)
+│   └── etsu.exe             ← compiled binary (build output)
 ├── conf/
-│   ├── .thr                  ← dirdiff parallel hash threads (default 8)
-│   ├── .cdirs                ← delcache configuration
-│   ├── .cats                 ← catsort configuration
-│   ├── .indexignore          ← reindex skip list
-│   └── logs/reindex/         ← rollback history (auto, 25 newest kept)
+│   ├── .thr                 ← dirdiff parallel hash threads (default 8)
+│   ├── .cdirs               ← delcache configuration
+│   ├── .cats                ← catsort configuration
+│   ├── .indexignore         ← reindex skip list
+│   └── logs/reindex/        ← rollback history (auto, 25 newest kept)
+├── docs/
+│   ├── delcache.md
+│   ├── dirdiff.md
+│   ├── catsort.md
+│   ├── reindex.md
+│   └── etsu.md
 ├── build.bat
 └── README.md
 ```
@@ -360,8 +82,6 @@ shared/
 ### 32-bit systems
 
 For 32-bit Windows, edit `build.bat` to use `C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe` (no `64`).
-
----
 
 ## Compatibility
 
