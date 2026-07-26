@@ -1,0 +1,192 @@
+{
+  "repo_notes": [
+    {
+      "content": ""
+    }
+  ],
+  "pages": [
+    {
+      "title": "Overview",
+      "purpose": "High-level introduction to winkit: what it is, its design philosophy (zero-dependency C#, shared/bin PATH consolidation, safety-first patterns), and a map of all tools. Links to child pages for each major subsystem.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Architecture and Design Principles",
+      "purpose": "Explains the core architectural decisions: why C# over Python, the shared/bin PATH-ceiling solution, the copy-verify-delete safety pattern, dry-run flags, rollback logs, and the zero-dependency compilation strategy using csc.exe.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Getting Started: Building and Deploying",
+      "purpose": "Step-by-step guide for building all tools from source using their respective build.bat scripts, the .NET Framework 4.0 csc.exe toolchain, and deploying binaries to shared/bin. Covers Task Scheduler setup for daemon tools.",
+      "parent": "Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Shared CLI Tools",
+      "purpose": "Overview of the five portable CLI utilities in shared/bin/ (delcache, dirdiff, catsort, reindex, etsu), their common design patterns, and the shared configuration directory. Links to child pages for each tool.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "dirdiff — Directory Comparison",
+      "purpose": "Deep dive into dirdiff.exe: three-stage comparison pipeline (presence, size, SHA256), parallel hash engine, CLI and GUI folder-picker modes, FileEntry data model, and the .thr threading configuration.",
+      "parent": "Shared CLI Tools",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "catsort — Category-Based File Sorting",
+      "purpose": "Deep dive into catsort.exe: .cats configuration format, copy-verify-delete integrity pattern, SHA256 hash verification, dry-run mode, Category data structure, and the stateful .cats parser.",
+      "parent": "Shared CLI Tools",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "reindex — Sequential File Renaming",
+      "purpose": "Deep dive into reindex.exe: two-phase GUID-temp rename pipeline, zero-padded sequential naming, .indexignore exclusion list, rollback mechanism with 25-entry log rotation, and dry-run mode.",
+      "parent": "Shared CLI Tools",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "delcache — Recursive Cache Cleanup",
+      "purpose": "Deep dive into delcache.exe: recursive directory enumeration, .cdirs configuration for target folder names, interactive confirmation prompt, permission-error handling, and its role as the C# successor to the archived delpyc Python tool.",
+      "parent": "Shared CLI Tools",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "System Monitors and Daemons",
+      "purpose": "Overview of the always-running background services: diskwatch (disk health monitor) and batcap (battery telemetry logger). Links to child pages for each daemon.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "diskwatch — Disk Health Monitor",
+      "purpose": "Comprehensive coverage of diskwatch.exe: execution pipeline (fsutil/chkdsk/smartctl orchestration), MasterState model, delta-based change detection, Wininit event log reader, .cmds and .smart configuration files, log retention (5-run history), and the read-only safety design.",
+      "parent": "System Monitors and Daemons",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "batcap — Battery Telemetry Logger",
+      "purpose": "Deep dive into batcap.exe: WMI root\\WMI namespace queries (BatteryFullChargedCapacity, BatteryStatus, BatteryCycleCount), .conf design capacity fallback, silent winexe execution for Task Scheduler, append-only log format, and the HP EliteBook workaround rationale.",
+      "parent": "System Monitors and Daemons",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "kdbx-backup — KeePass Database Backup Pipeline",
+      "purpose": "Overview of the two-tool KeePass backup pipeline (kdbxWatch daemon + kdbxPushToRemote scheduler), their interaction, shared .conf configuration, and the append-only cloud archive design. Links to child pages for each tool.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "kdbxWatch — File System Watcher Daemon",
+      "purpose": "Deep dive into kdbxWatch.exe: FileSystemWatcher event handling, per-file debounce timers, SHA256 hash-based change detection, baseline snapshot on startup, timestamped snapshot folder creation, MaxSnapshots pruning, single-instance named mutex, and the StateLock/LogLock concurrency model.",
+      "parent": "kdbx-backup — KeePass Database Backup Pipeline",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "kdbxPushToRemote — Cloud Sync Runner",
+      "purpose": "Deep dive into kdbxPushToRemote.exe: sequential rclone copy to Google Drive/Dropbox/Koofr, why rclone copy not rclone sync (append-only cloud archive), per-remote exit code logging, .conf Remotes configuration, and Task Scheduler run-to-completion lifecycle.",
+      "parent": "kdbx-backup — KeePass Database Backup Pipeline",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "wallswitch — Wallpaper Rotation Service",
+      "purpose": "Complete documentation of wallswitch.exe: shuffle queue algorithm (Fisher-Yates), state file format (queue/shown sections), image sync on reshuffle, ApplyWallpaper via SystemParametersInfo + Registry, ResolveAssetsDir from .conf, and the evolution from the legacy wallsys_old dual-binary approach.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Shuffle Queue and State Management",
+      "purpose": "Detailed explanation of the shuffle queue internals: queue/shown list lifecycle, Fisher-Yates randomization with Guid-seeded Random, image sync (add new files, remove missing files), state file serialization format, and MakeRelative path handling for portability.",
+      "parent": "wallswitch — Wallpaper Rotation Service",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Windows Desktop Integration",
+      "purpose": "Covers the Win32 integration layer: P/Invoke of SystemParametersInfo (SPI_SETDESKWALLPAPER), Registry writes to HKCU\\Control Panel\\Desktop (Wallpaper, WallpaperStyle, TileWallpaper), wallpaper style constants (Fill=10, Fit=6, Stretch=2), and why both Registry and API calls are needed for persistence across reboots.",
+      "parent": "wallswitch — Wallpaper Rotation Service",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "etsu — ExifTool Metadata Manager",
+      "purpose": "Documentation of the C# binary at shared/bin/etsu.exe with three subcommands (read, clean, date). read displays all metadata from a single file. clean strips EXIF/IPTC/XMP via a 5-stage safe-swap pipeline. date sets EXIF + filesystem timestamps. All use WinForms file dialogs, temp workspace with rollback, and 10-log rotation. PS1 originals archived.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Glossary",
+      "purpose": "Definitions of all codebase-specific terms, abbreviations, design patterns, and domain concepts used across winkit. Each entry includes code pointers to the relevant file and function/class where the term originates or is most clearly expressed.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    }
+  ]
+}
