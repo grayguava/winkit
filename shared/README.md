@@ -366,7 +366,7 @@ For 32-bit Windows, edit `build.bat` to use `C:\Windows\Microsoft.NET\Framework\
 ## Compatibility
 
 | Aspect | delcache | dirdiff | catsort | reindex | etsu |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | OS | Windows 7+ | Windows 7+ | Windows 7+ | Windows 7+ | Windows 7+ |
 | .NET version | .NET 4.0 | .NET 4.0 | .NET 4.0 | .NET 4.0 | .NET 4.0 |
 | Dependencies | None | `System.Windows.Forms` | None | None | `System.Windows.Forms` + exiftool |
