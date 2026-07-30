@@ -83,7 +83,7 @@ class Remind
                 break;
             }
         }
-        b.AppendLine("SMART overall: " + healthStr);
+        b.AppendLine("SMART Overall Health: " + healthStr);
         b.AppendLine();
 
         var chRows = new List<Tuple<string, string>>();
@@ -103,7 +103,7 @@ class Remind
         {
             long v;
             if (smartState.ExtraAttrs.TryGetValue("Temperature Celsius", out v))
-                diRows.Add(Tuple.Create("Temperature", v + " \u00B0" + "C"));
+                diRows.Add(Tuple.Create("Temperature", v + " \u00B0" + "°C"));
             if (smartState.ExtraAttrs.TryGetValue("Power On Hours", out v))
                 diRows.Add(Tuple.Create("Power-On Hours", v + " h"));
             if (smartState.ExtraAttrs.TryGetValue("Total LBAs Written", out v))
