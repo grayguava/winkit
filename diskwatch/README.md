@@ -225,11 +225,9 @@ Only the 5 most recent timestamped run directories are kept. Older runs are prun
 
 ## Popup
 
-At the end of every normal run (and via `--remind`), a custom dark-themed dialog with Consolas monospace font shows the summary.
-<p align="right">
-  <img src="popup.png" alt="diskwatch popup" width="380"/>
-</p>
-Two tiers:
+<img src="popup.png" alt="diskwatch popup" width="380"/>
+  
+At the end of every normal run (and via `--remind`), a custom dark-themed dialog with Consolas monospace font shows the summary. Two tiers:
 
 | Condition | Icon | Title text |
 |---|---|---|
