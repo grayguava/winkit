@@ -1,0 +1,8 @@
+; ymdl configuration
+; ytdlp:  "default" (PATH), or full path to yt-dlp.exe
+; ffmpeg: "default" (PATH), or full path to ffmpeg.exe / ffprobe.exe
+; outdir: download directory
+
+ytdlp=default
+ffmpeg=default
+outdir=D:\Music
