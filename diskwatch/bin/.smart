@@ -1,5 +1,18 @@
-5
-9
-197
-198
-190
+# SMART attributes to track: ID=Name
+# First 5 = important values shown in popup
+# Rest = informational only
+# Ordered by importance
+
+5=Reallocated Sectors
+197=Current Pending Sectors
+198=Offline Uncorrectable
+196=Reallocation Events
+199=UDMA CRC Errors
+
+169=Endurance Remaining
+194=Temperature Celsius
+9=Power On Hours
+177=Wear Leveling Count
+241=Total LBAs Written
+242=Total LBAs Read
+1=Raw Read Error Rate

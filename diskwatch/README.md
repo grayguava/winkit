@@ -4,7 +4,7 @@ Read-only disk health monitor that runs system checks, compares results against 
 
 - **Tool:** `diskwatch/bin/diskwatch.exe`
 - **Source:** `diskwatch/src/`
-- **Language:** C#, compiled via `csc.exe`
+- **Language:** C#, compiled via `csc.exe` as winexe (no console window)
 - **Role:** Detection only. Never runs DISM, SFC, chkdsk /f, or SMART self-tests.
 
 ---
@@ -15,7 +15,7 @@ Read-only disk health monitor that runs system checks, compares results against 
 diskwatch
 ```
 
-Runs all checks, prints a verdict to the console, and shows a popup with the summary.
+Runs all checks, prints a verdict to the console (still visible if run from a terminal), and shows a dark-themed popup with aligned monospace layout.
 
 ```
 diskwatch --remind
@@ -28,7 +28,11 @@ Shows the same popup from the last run without re-running checks. Useful for Tas
 | Code | Meaning |
 |---|---|
 | 0 | Healthy — no changes since last check |
-| 1 | Something changed |
+| 1 | Something changed (important attrs only) |
+
+### Mutex
+
+A named mutex prevents concurrent instances. If diskwatch is already running, a second launch prints `diskwatch is already running.` and exits.
 
 ---
 
@@ -64,7 +68,7 @@ Runs smartctl with full output for each configured device. Parsed for:
 - **Device Model, Serial Number, Firmware Version** — drive identity.
 - **SMART overall-health self-assessment test result** — PASSED/FAILED.
 - **Percentage Used Endurance Indicator** — remaining endurance (NVMe).
-- **Watched attributes** — only the SMART attribute IDs listed in config (raw value tracked per run).
+- **Watched attributes** — tracked by ID from config; stored by name.
 
 ### Windows Event Log
 
@@ -89,9 +93,8 @@ fsutil dirty query D:
 chkdsk C: /scan
 chkdsk D: /scan
 
-; For SMART monitoring:
-; [smartctl]
-; smartctl -x /dev/sda
+[smartctl]
+smartctl -x /dev/sda
 ```
 
 The first word of each line is the executable, the rest are its arguments. Only `fsutil`, `chkdsk`, and `smartctl` are accepted as executables; argument strings are sanitized against shell metacharacters. Invalid entries are silently skipped. Section names determine how the parser interprets output:
@@ -103,17 +106,27 @@ The Event Log reader is built-in (uses .NET EventLog API, not an external comman
 
 ### .smart
 
-`bin/.smart` lists SMART attribute IDs to track, one per line:
+`bin/.smart` lists SMART attributes to track in `ID=Name` format. The first 5 are **important** (shown in the Critical Health section of the popup and trigger warnings on change). The rest are **extras** (informational, shown in Drive Information, no warning).
 
 ```ini
-5
-9
-197
-198
-190
+# First 5 = important values shown in popup
+# Rest = informational only
+5=Reallocated Sectors
+197=Current Pending Sectors
+198=Offline Uncorrectable
+196=Reallocation Events
+199=UDMA CRC Errors
+
+169=Endurance Remaining
+194=Temperature Celsius
+9=Power On Hours
+177=Wear Leveling Count
+241=Total LBAs Written
+242=Total LBAs Read
+1=Raw Read Error Rate
 ```
 
-Only these IDs are tracked across runs and flagged on change. Lines starting with `#` are comments.
+Names are human-readable (spaces allowed) and used as keys in result.json. Lines starting with `#` or `;` are comments. Blank lines are ignored.
 
 ---
 
@@ -127,7 +140,7 @@ Structure:
 
 ```json
 {
-  "timestamp": "2026-07-17T14:30:00.0000000",
+  "timestamp": "2026-07-30T11:14:26.0000000",
   "drives": {
     "C": {
       "dirty": false,
@@ -136,23 +149,32 @@ Structure:
     }
   },
   "smart": {
-    "/dev/sda": {
-      "model": "Samsung SSD 990 PRO",
-      "serial": "S6P7NJ0W123456",
-      "firmware": "5B2QGXA7",
-      "health": "PASSED",
-      "endurance": 95,
-      "attrs": {
-        "5": 0,
-        "196": 0,
-        "197": 0,
-        "198": 0
+    "sda": {
+      "model": "CONSISTENT S6 SSD 256GB",
+      "serial": "AA000000000000001311",
+      "firmware": "V0422A0",
+      "health": "FAILED",
+      "endurance": 98,
+      "important": {
+        "Reallocated Sectors": 41,
+        "Current Pending Sectors": 41,
+        "Offline Uncorrectable": 32,
+        "Reallocation Events": 32,
+        "UDMA CRC Errors": 1
+      },
+      "extras": {
+        "Temperature Celsius": 50,
+        "Power On Hours": 1626,
+        "Total LBAs Written": 193694,
+        "Total LBAs Read": 276902
       }
     }
   },
   "lastRepair": null
 }
 ```
+
+SMART attributes are stored by name (not numeric ID). The `important` and `extras` split is determined by position in `.smart` (first 5 = important).
 
 ### Diff comparison
 
@@ -163,8 +185,10 @@ On every run, the current state is compared against the previous state loaded fr
 - **Bad sector count** changed.
 - **SMART health** changed (PASSED / FAILED).
 - **SMART endurance** changed.
-- **Any watched SMART attribute raw value** changed.
+- **Any important SMART attribute** changed.
 - **Repair event timestamp** changed.
+
+Extra SMART attribute changes are tracked but do NOT trigger a warning popup or exit code 1.
 
 If no previous state exists (first run), no changes are reported.
 
@@ -174,7 +198,7 @@ Every run saves the raw command output to `logs/<timestamp>/runs/` directory:
 
 ```
 logs/
-├── 2026-07-17T14-30-00/
+├── 2026-07-30T11-14-26/
 │   ├── result.json
 │   └── runs/
 │       ├── fsutil_C.json
@@ -201,14 +225,43 @@ Only the 5 most recent timestamped run directories are kept. Older runs are prun
 
 ## Popup
 
-At the end of every normal run (and via `--remind`), a `MessageBox` shows a summary with an OK button. Two tiers:
+At the end of every normal run (and via `--remind`), a custom dark-themed dialog with Consolas monospace font shows the summary. Two tiers:
 
 | Condition | Icon | Title text |
 |---|---|---|
-| No changes | Information (i) | "Today's run is successful. No issues found." |
-| Changes detected | Warning (!) | "Today's run is successful. Some values have changed since the last run." |
+| No important changes | Information | "Critical values are stable since last run." |
+| Important changes detected | Warning | "Some critical values have changed since the last run." |
 
-Both tiers show the same data: run date, per-drive filesystem status, bad sectors, dirty bit, SMART health, and endurance percentage.
+Layout:
+
+```
+<status line>
+
+<date>
+
+Drive C: Clean.
+Drive D: Clean | 41 KB in bad sectors.
+
+SMART overall: FAILED
+
+Critical Health
+──────────────────────────────
+Reallocated Sectors         41
+Current Pending Sectors     41
+Offline Uncorrectable       32
+Reallocation Events         32
+UDMA CRC Errors              1
+
+Drive Information
+──────────────────────────────
+Endurance                 98%
+Temperature              50 °C
+Power-On Hours        1626 h
+LBAs Written         193,694
+LBAs Read            276,902
+```
+
+Both sections share the same label/value column alignment. Values are right-aligned.
 
 ---
 
@@ -218,7 +271,7 @@ Both tiers show the same data: run date, per-drive filesystem status, bad sector
 
 - .NET Framework 4.0+ (ships with Windows 8+; available for Windows 7).
 - `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe` — part of the .NET Framework SDK.
-- `System.Web.Extensions.dll`, `System.Windows.Forms.dll` — reference assemblies that ship with .NET Framework.
+- `System.Web.Extensions.dll`, `System.Windows.Forms.dll`, `System.Drawing.dll` — reference assemblies that ship with .NET Framework.
 
 ### Build
 
@@ -226,21 +279,21 @@ Both tiers show the same data: run date, per-drive filesystem status, bad sector
 build.bat
 ```
 
-Compiles all source files in `src/` to `bin/diskwatch.exe`. No Visual Studio, no dotnet CLI, no NuGet, no install step.
+Compiles all source files in `src/` to `bin/diskwatch.exe` as a winexe (no console window). No Visual Studio, no NuGet, no dotnet CLI, no install step.
 
 ### Build output
 
 ```
 diskwatch/
 ├── src/
-│   ├── program.cs           ← Main(), --remind, runs commands, Event Log reader, popup
+│   ├── program.cs           ← Main(), mutex, --remind, runs commands, Event Log reader
 │   ├── commandrunner.cs     ← Process launcher (no timeout)
-│   ├── parser.cs            ← State model, parsing, diff, pretty JSON
-│   └── popup.cs             ← MessageBox popup with summary
+│   ├── parser.cs            ← State model, SmartAttrDef, parsing, diff, pretty JSON
+│   └── popup.cs             ← Custom dark monospace dialog with aligned tables
 ├── bin/
 │   ├── diskwatch.exe        ← compiled binary (build output)
 │   ├── .cmds                ← commands to run (edit this)
-│   └── .smart               ← SMART attr IDs to track (edit this)
+│   └── .smart               ← SMART attr IDs and names (edit this)
 ├── logs/                    ← auto-created, holds per-run dirs with result.json + runs/
 ├── build.bat
 └── README.md
@@ -270,6 +323,10 @@ Auto-detecting drives via WMI or device enumeration adds complexity and can miss
 
 Disk health checks are IO-intensive (fsutil, chkdsk, smartctl all read from disk) and don't need sub-minute granularity. Task Scheduler with a weekly trigger is the right tool for periodic monitoring.
 
+### Why a custom dialog instead of MessageBox
+
+The monospace dialog with Consolas font enables aligned tables (Critical Health + Drive Information columns) that would be misaligned in MessageBox's proportional font.
+
 ---
 
 ## Compatibility
@@ -287,12 +344,9 @@ Disk health checks are IO-intensive (fsutil, chkdsk, smartctl all read from disk
 
 ## Known limitations
 
-- **Admin required** — run as Administrator. Without elevation, fsutil reports "Access Denied", chkdsk
-  cannot scan, and smartctl may show limited data.
+- **Admin required** — run as Administrator. Without elevation, fsutil reports "Access Denied", chkdsk cannot scan, and smartctl may show limited data.
 - **Windows-only** — uses fsutil, chkdsk, and Windows Event Log.
-- **smartctl optional but manual** — must be installed and configured in .cmds if you want SMART
-  checks. Not bundled.
+- **smartctl optional but manual** — must be installed and configured in .cmds if you want SMART checks. Not bundled.
 - **No drive discovery** — configure every drive in .cmds and SMART attrs in .smart.
 - **No daemon mode** — use Task Scheduler for periodic runs.
-- **Event log filtering is heuristic** — the wininit/repair event detection is based on keyword
-  matching and may miss or falsely flag events depending on Windows version and language.
+- **Event log filtering is heuristic** — the wininit/repair event detection is based on keyword matching and may miss or falsely flag events depending on Windows version and language.

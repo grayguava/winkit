@@ -4,6 +4,12 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
+public class SmartAttrDef
+{
+    public int Id;
+    public string Name;
+}
+
 public class DriveState
 {
     public bool? Dirty;
@@ -18,7 +24,8 @@ public class SmartState
     public string Firmware;
     public string Health;
     public int Endurance;
-    public Dictionary<string, long> Attrs;
+    public Dictionary<string, long> ImportantAttrs;
+    public Dictionary<string, long> ExtraAttrs;
 }
 
 public class MasterState
@@ -52,7 +59,7 @@ public static class MasterStateManager
         File.WriteAllText(path, ToJson(state), new System.Text.UTF8Encoding(false));
     }
 
-    public static MasterState Build(string runDir, List<int> smartAttrs)
+    public static MasterState Build(string runDir, List<SmartAttrDef> smartAttrs)
     {
         var state = new MasterState
         {
@@ -136,12 +143,13 @@ public static class MasterStateManager
             ds.BadSectorsKb = -1;
     }
 
-    static SmartState ParseSmart(string output, List<int> smartAttrs)
+    static SmartState ParseSmart(string output, List<SmartAttrDef> smartAttrs)
     {
         var ss = new SmartState
         {
             Endurance = -1,
-            Attrs = new Dictionary<string, long>()
+            ImportantAttrs = new Dictionary<string, long>(),
+            ExtraAttrs = new Dictionary<string, long>()
         };
         if (output == null) return ss;
 
@@ -160,13 +168,21 @@ public static class MasterStateManager
             int used = int.Parse(m.Groups[1].Value);
             ss.Endurance = 100 - used;
         }
-        foreach (int attrId in smartAttrs)
+        int importantLimit = smartAttrs.Count < 5 ? smartAttrs.Count : 5;
+        for (int i = 0; i < smartAttrs.Count; i++)
         {
+            var attr = smartAttrs[i];
             m = Regex.Match(o,
-                @"^\s*" + attrId + @"\s+\S[\S ]*?\S\s+\S+\s+\d+\s+\d+\s+\S+\s+\S\s+(\d+)",
+                @"^\s*" + attr.Id + @"\s+\S[\S ]*?\S\s+\S+\s+\d+\s+\d+\s+\S+\s+\S\s+(\d+)",
                 RegexOptions.Multiline);
             if (m.Success)
-                ss.Attrs[attrId.ToString()] = long.Parse(m.Groups[1].Value);
+            {
+                long val = long.Parse(m.Groups[1].Value);
+                if (i < importantLimit)
+                    ss.ImportantAttrs[attr.Name] = val;
+                else
+                    ss.ExtraAttrs[attr.Name] = val;
+            }
         }
         return ss;
     }
@@ -216,13 +232,22 @@ public static class MasterStateManager
                     changes.Add(kv.Key + ": health " + ps.Health + " \u2192 " + cs.Health);
                 if (ps.Endurance != cs.Endurance)
                     changes.Add(kv.Key + ": endurance " + ps.Endurance + "% \u2192 " + cs.Endurance + "%");
-                if (ps.Attrs != null && cs.Attrs != null)
+                if (cs.ImportantAttrs != null)
                 {
-                    foreach (var akv in cs.Attrs)
+                    foreach (var akv in cs.ImportantAttrs)
                     {
                         long pv;
-                        if (ps.Attrs.TryGetValue(akv.Key, out pv) && pv != akv.Value)
-                            changes.Add(kv.Key + ": attr " + akv.Key + " " + pv + " \u2192 " + akv.Value);
+                        if (ps.ImportantAttrs != null && ps.ImportantAttrs.TryGetValue(akv.Key, out pv) && pv != akv.Value)
+                            changes.Add(kv.Key + ": " + akv.Key + " " + pv + " \u2192 " + akv.Value);
+                    }
+                }
+                if (cs.ExtraAttrs != null)
+                {
+                    foreach (var akv in cs.ExtraAttrs)
+                    {
+                        long pv;
+                        if (ps.ExtraAttrs != null && ps.ExtraAttrs.TryGetValue(akv.Key, out pv) && pv != akv.Value)
+                            changes.Add(kv.Key + ": extra " + akv.Key + " " + pv + " \u2192 " + akv.Value);
                     }
                 }
             }
@@ -299,14 +324,24 @@ public static class MasterStateManager
         ss.Firmware = d.ContainsKey("firmware") ? (string)d["firmware"] : null;
         ss.Health = d.ContainsKey("health") ? (string)d["health"] : null;
         if (d.ContainsKey("endurance")) ss.Endurance = Convert.ToInt32(d["endurance"]);
-        if (d.ContainsKey("attrs"))
+        if (d.ContainsKey("important"))
         {
-            var ad = d["attrs"] as Dictionary<string, object>;
+            var ad = d["important"] as Dictionary<string, object>;
             if (ad != null)
             {
-                ss.Attrs = new Dictionary<string, long>();
+                ss.ImportantAttrs = new Dictionary<string, long>();
                 foreach (var kv in ad)
-                    ss.Attrs[kv.Key] = Convert.ToInt64(kv.Value);
+                    ss.ImportantAttrs[kv.Key] = Convert.ToInt64(kv.Value);
+            }
+        }
+        if (d.ContainsKey("extras"))
+        {
+            var ad = d["extras"] as Dictionary<string, object>;
+            if (ad != null)
+            {
+                ss.ExtraAttrs = new Dictionary<string, long>();
+                foreach (var kv in ad)
+                    ss.ExtraAttrs[kv.Key] = Convert.ToInt64(kv.Value);
             }
         }
         return ss;
@@ -347,11 +382,25 @@ public static class MasterStateManager
                 Field(sb, "firmware", kv.Value.Firmware, 3); sb.Append(",\r\n");
                 Field(sb, "health", kv.Value.Health, 3); sb.Append(",\r\n");
                 Field(sb, "endurance", kv.Value.Endurance, 3); sb.Append(",\r\n");
-                sb.Append("      \"attrs\": {\r\n");
+
+                sb.Append("      \"important\": {\r\n");
                 bool afirst = true;
-                if (kv.Value.Attrs != null)
+                if (kv.Value.ImportantAttrs != null)
                 {
-                    foreach (var akv in kv.Value.Attrs)
+                    foreach (var akv in kv.Value.ImportantAttrs)
+                    {
+                        if (!afirst) sb.Append(",\r\n");
+                        afirst = false;
+                        sb.Append("        \"" + akv.Key + "\": " + akv.Value);
+                    }
+                }
+                sb.Append("\r\n      },\r\n");
+
+                sb.Append("      \"extras\": {\r\n");
+                afirst = true;
+                if (kv.Value.ExtraAttrs != null)
+                {
+                    foreach (var akv in kv.Value.ExtraAttrs)
                     {
                         if (!afirst) sb.Append(",\r\n");
                         afirst = false;

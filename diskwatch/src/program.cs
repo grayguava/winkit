@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 class Program
 {
@@ -13,12 +14,34 @@ class Program
         public string Args;
     }
 
+    static Mutex _mutex;
+
     static string BaseDir()
     {
         return Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
     }
 
     static int Main(string[] args)
+    {
+        bool createdNew;
+        _mutex = new Mutex(true, "diskwatch", out createdNew);
+        if (!createdNew)
+        {
+            Console.Error.WriteLine("diskwatch is already running.");
+            return 1;
+        }
+        try
+        {
+            return MainBody(args);
+        }
+        finally
+        {
+            _mutex.ReleaseMutex();
+            _mutex.Dispose();
+        }
+    }
+
+    static int MainBody(string[] args)
     {
         if (args.Length > 0 && (args[0] == "--remind" || args[0] == "/remind"))
             return Remind.Show();
@@ -75,7 +98,7 @@ class Program
             foreach (string c in changes)
                 Console.WriteLine("    " + c);
             Console.WriteLine();
-            Remind.Show(true);
+            Remind.Show(changes.Exists(c => !c.Contains(" extra ")));
             return 1;
         }
 
@@ -135,16 +158,20 @@ class Program
         return slash >= 0 ? last.Substring(slash + 1) : last;
     }
 
-    static List<int> LoadSmartAttrs(string path)
+    static List<SmartAttrDef> LoadSmartAttrs(string path)
     {
-        var attrs = new List<int>();
+        var attrs = new List<SmartAttrDef>();
         if (!File.Exists(path)) return attrs;
         foreach (string rawLine in File.ReadAllLines(path))
         {
             string line = rawLine.Trim();
             if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";")) continue;
+            int eq = line.IndexOf('=');
+            string idStr = eq >= 0 ? line.Substring(0, eq).Trim() : line.Trim();
+            string name = eq >= 0 ? line.Substring(eq + 1).Trim() : idStr;
             int id;
-            if (int.TryParse(line, out id)) attrs.Add(id);
+            if (int.TryParse(idStr, out id))
+                attrs.Add(new SmartAttrDef { Id = id, Name = name });
         }
         return attrs;
     }
