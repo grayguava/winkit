@@ -272,13 +272,14 @@ class Remind
             };
             backBtn.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
 
-            int panelW = Math.Max(mainLabel.PreferredWidth, smartLabel.PreferredWidth);
+            int stripW = CustomScrollPanel.StripW;
+            int panelW = Math.Max(mainLabel.PreferredWidth, smartLabel.PreferredWidth) + stripW;
             int smartW = smartLabel.PreferredWidth;
             int panelH = Math.Min(Math.Max(mainLabel.PreferredHeight, iconBox.Height), 480);
             int panelX = iconBox.Width + 32;
             int btnY = 16 + panelH + 16;
             Size mainSize = new Size(panelX + panelW + 16, btnY + ok.Height + 16);
-            int smartFormW = 16 + smartW + 16;
+            int smartFormW = 16 + smartW + stripW + 16;
 
             var panel = new CustomScrollPanel
             {
@@ -324,8 +325,8 @@ class Remind
                 form.AcceptButton = backBtn;
                 form.ClientSize = new Size(smartFormW, mainSize.Height);
                 panel.Location = new Point(16, 16);
-                panel.Size = new Size(smartW, panelH);
-                backBtn.Location = new Point(16 + smartW - backBtn.Width, btnY);
+                panel.Size = new Size(smartW + stripW, panelH);
+                backBtn.Location = new Point(16 + smartW + stripW - backBtn.Width, btnY);
                 panel.ScrollTop();
                 panel.RefreshLayout();
                 panel.Focus();

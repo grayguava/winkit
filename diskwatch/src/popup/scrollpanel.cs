@@ -11,6 +11,7 @@ class CustomScrollPanel : Panel
 
     const int TrackW = 6;
     const int TrackPad = 4;
+    public const int StripW = TrackW + 8;
 
     public CustomScrollPanel()
     {
