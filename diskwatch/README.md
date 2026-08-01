@@ -106,7 +106,7 @@ The Event Log reader is built-in (uses .NET EventLog API, not an external comman
 
 ### .smart
 
-`bin/.smart` lists SMART attributes to track in `ID=Name` format. The first 5 are **important** (shown in the Critical Health section of the popup and trigger warnings on change). The rest are **extras** (informational, shown in Drive Information, no warning).
+`bin/.smart` lists SMART attributes to track in `ID=Name` format. The first 5 are **important** (shown in the Critical Health section of the popup and trigger warnings on change). The rest are **extras** (informational, shown in the Extra view, no warning).
 
 ```ini
 # First 5 = important values shown in popup
@@ -244,7 +244,7 @@ Layout:
 Drive C: Clean.
 Drive D: Clean | 41 KB in bad sectors.
 
-SMART overall: FAILED
+SMART Overall Health: FAILED
 
 Critical Health
 ──────────────────────────────
@@ -253,17 +253,9 @@ Current Pending Sectors     41
 Offline Uncorrectable       32
 Reallocation Events         32
 UDMA CRC Errors              1
-
-Drive Information
-──────────────────────────────
-Endurance                 98%
-Temperature              50 °C
-Power-On Hours        1626 h
-LBAs Written         193,694
-LBAs Read            276,902
 ```
 
-Both sections share the same label/value column alignment. Values are right-aligned.
+A dim **Extra** button (left) opens the full categorized SMART breakdown in the same window — scrollable if it overflows, with **Back** replacing **OK** while viewing it. It lists device identity (model/serial/firmware), health, endurance, the Critical Health table, and the extras table (temperature, power-on hours, LBAs written/read). Values are right-aligned.
 
 ---
 
@@ -327,7 +319,7 @@ Disk health checks are IO-intensive (fsutil, chkdsk, smartctl all read from disk
 
 ### Why a custom dialog instead of MessageBox
 
-The monospace dialog with Consolas font enables aligned tables (Critical Health + Drive Information columns) that would be misaligned in MessageBox's proportional font.
+The monospace dialog with Consolas font enables aligned tables (Critical Health, plus the categorized Extra view) that would be misaligned in MessageBox's proportional font.
 
 ---
 
