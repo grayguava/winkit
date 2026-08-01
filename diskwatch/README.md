@@ -352,7 +352,7 @@ The monospace dialog with Consolas font enables aligned tables (Critical Health,
 
 - **Admin required** — run as Administrator. Without elevation, fsutil reports "Access Denied", chkdsk cannot scan, and smartctl may show limited data.
 - **Windows-only** — uses fsutil, chkdsk, and Windows Event Log.
-- **smartctl optional but manual** — must be installed and configured in .cmds if you want SMART checks. Not bundled.
+- **smartctl optional but manual** — must be installed and configured in .cmds if you want SMART checks. Not bundled. Download the Windows package from [smartmontools](https://www.smartmontools.org/wiki/Download#InstalltheWindowspackage).
 - **No drive discovery** — configure every drive in .cmds and SMART attrs in .smart.
 - **No daemon mode** — use Task Scheduler for periodic runs.
 - **Event log filtering is heuristic** — the wininit/repair event detection is based on keyword matching and may miss or falsely flag events depending on Windows version and language.
