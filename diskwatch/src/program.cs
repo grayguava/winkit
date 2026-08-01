@@ -2,18 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using System.Threading;
 
 class Program
 {
-    struct Command
-    {
-        public string Name;
-        public string Exe;
-        public string Args;
-    }
-
     static Mutex _mutex;
 
     static string BaseDir()
@@ -51,8 +43,8 @@ class Program
         string runDir = Path.Combine(logsDir, DateTime.Now.ToString("yyyy-MM-ddTHH-mm-ss"));
         string runsDir = Path.Combine(runDir, "runs");
 
-        var commands = LoadCommands(Path.Combine(baseDir, ".cmds"));
-        var smartAttrs = LoadSmartAttrs(Path.Combine(baseDir, ".smart"));
+        var commands = CommandConfig.Load(Path.Combine(baseDir, ".cmds"));
+        var smartAttrs = SmartAttrConfig.Load(Path.Combine(baseDir, ".smart"));
 
         foreach (var cmd in commands)
         {
@@ -108,94 +100,12 @@ class Program
         return 0;
     }
 
-    static bool IsAllowedExe(string exe)
-    {
-        if (string.IsNullOrWhiteSpace(exe)) return false;
-        string name = exe.Trim().ToLowerInvariant();
-        return name == "fsutil" || name == "chkdsk" || name == "smartctl";
-    }
-
-    static bool IsSafeArgs(string args)
-    {
-        if (args == null) return false;
-        if (args.IndexOfAny(new char[] { '\r', '\n', ';', '|', '&', '>', '<', '$' }) >= 0) return false;
-        return Regex.IsMatch(args, @"^[A-Za-z0-9\s\.\-_:\/\\,""'=\+\(\)\[\]\*%]*$");
-    }
-
-    static List<Command> LoadCommands(string path)
-    {
-        var commands = new List<Command>();
-        if (!File.Exists(path)) return commands;
-        string section = null;
-        foreach (string rawLine in File.ReadAllLines(path))
-        {
-            string line = rawLine.Trim();
-            if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";")) continue;
-            if (line.StartsWith("[") && line.EndsWith("]"))
-            {
-                section = line.Substring(1, line.Length - 2);
-                continue;
-            }
-            if (section == null) continue;
-            int sep = line.IndexOf(' ');
-            string exe = sep > 0 ? line.Substring(0, sep) : line;
-            string args = sep > 0 ? line.Substring(sep + 1) : "";
-            if (!IsAllowedExe(exe)) continue;
-            if (!IsSafeArgs(args)) continue;
-            string suffix = MakeSuffix(args);
-            commands.Add(new Command { Name = section + "_" + suffix, Exe = exe, Args = args });
-        }
-        return commands;
-    }
-
-    static string MakeSuffix(string args)
-    {
-        var m = System.Text.RegularExpressions.Regex.Match(args, @"\b([A-Za-z]):");
-        if (m.Success) return m.Groups[1].Value.ToUpperInvariant();
-        string[] parts = args.Split(' ');
-        string last = parts[parts.Length - 1];
-        int slash = last.LastIndexOfAny(new char[] { '/', '\\' });
-        return slash >= 0 ? last.Substring(slash + 1) : last;
-    }
-
-    static List<SmartAttrDef> LoadSmartAttrs(string path)
-    {
-        var attrs = new List<SmartAttrDef>();
-        if (!File.Exists(path)) return attrs;
-        foreach (string rawLine in File.ReadAllLines(path))
-        {
-            string line = rawLine.Trim();
-            if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";")) continue;
-            int eq = line.IndexOf('=');
-            string idStr = eq >= 0 ? line.Substring(0, eq).Trim() : line.Trim();
-            string name = eq >= 0 ? line.Substring(eq + 1).Trim() : idStr;
-            int id;
-            if (int.TryParse(idStr, out id))
-                attrs.Add(new SmartAttrDef { Id = id, Name = name });
-        }
-        return attrs;
-    }
-
     static void SaveRaw(string dir, string name, int exitCode, string output)
     {
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, name + ".json");
         File.WriteAllText(path,
-            "{\"ExitCode\":" + exitCode + ",\"Output\":" + EncodeJson(output ?? "") + "}");
-    }
-
-    static string EncodeJson(string s)
-    {
-        var sb = new System.Text.StringBuilder();
-        sb.Append('"');
-        foreach (char c in s)
-        {
-            if (c == '"') sb.Append("\\\"");
-            else if (c == '\\') sb.Append("\\\\");
-            else sb.Append(c);
-        }
-        sb.Append('"');
-        return sb.ToString();
+            "{\"ExitCode\":" + exitCode + ",\"Output\":" + MasterStateManager.EncodeJson(output ?? "") + "}");
     }
 
     static string ReadWininitLog()

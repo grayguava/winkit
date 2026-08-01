@@ -1,42 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
-public class SmartAttrDef
-{
-    public int Id;
-    public string Name;
-}
-
-public class DriveState
-{
-    public bool? Dirty;
-    public string Filesystem;
-    public long BadSectorsKb;
-}
-
-public class SmartState
-{
-    public string Model;
-    public string Serial;
-    public string Firmware;
-    public string Health;
-    public int Endurance;
-    public Dictionary<string, long> ImportantAttrs;
-    public Dictionary<string, long> ExtraAttrs;
-}
-
-public class MasterState
-{
-    public string Timestamp;
-    public Dictionary<string, DriveState> Drives;
-    public Dictionary<string, SmartState> Smart;
-    public string LastRepair;
-}
-
-public static class MasterStateManager
+public static partial class MasterStateManager
 {
     public static MasterState Load(string path)
     {
@@ -57,141 +24,6 @@ public static class MasterStateManager
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
         File.WriteAllText(path, ToJson(state), new System.Text.UTF8Encoding(false));
-    }
-
-    public static MasterState Build(string runDir, List<SmartAttrDef> smartAttrs)
-    {
-        var state = new MasterState
-        {
-            Timestamp = DateTime.Now.ToString("o"),
-            Drives = new Dictionary<string, DriveState>(),
-            Smart = new Dictionary<string, SmartState>(),
-            LastRepair = null
-        };
-
-        if (Directory.Exists(runDir))
-        {
-            foreach (string file in Directory.GetFiles(runDir, "*.json"))
-            {
-                string name = Path.GetFileNameWithoutExtension(file);
-                var result = LoadRaw(file);
-                if (result == null) continue;
-
-                if (name.StartsWith("fsutil_") || name.StartsWith("chkdsk_"))
-                {
-                    string letter = name.Substring(name.IndexOf('_') + 1);
-                    if (string.IsNullOrEmpty(letter)) continue;
-                    if (name.StartsWith("fsutil_"))
-                        GetOrCreateDrive(state, letter).Dirty = ParseDirty(result.Output);
-                    else
-                        ParseChkdsk(result.Output, GetOrCreateDrive(state, letter));
-                }
-                else if (name.StartsWith("smartctl_"))
-                {
-                    string label = name.Substring(name.IndexOf('_') + 1);
-                    state.Smart[label] = ParseSmart(result.Output, smartAttrs);
-                }
-                else if (name == "wininit")
-                {
-                    state.LastRepair = ParseWininit(result.Output);
-                }
-            }
-        }
-
-        return state;
-    }
-
-    static DriveState GetOrCreateDrive(MasterState state, string letter)
-    {
-        DriveState ds;
-        if (!state.Drives.TryGetValue(letter, out ds))
-        {
-            ds = new DriveState { BadSectorsKb = -1 };
-            state.Drives[letter] = ds;
-        }
-        return ds;
-    }
-
-    static bool? ParseDirty(string output)
-    {
-        if (output == null) return null;
-        if (output.IndexOf("NOT Dirty", StringComparison.OrdinalIgnoreCase) >= 0) return false;
-        if (output.IndexOf("is set", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-        return null;
-    }
-
-    static void ParseChkdsk(string output, DriveState ds)
-    {
-        if (output == null) return;
-        string o = output;
-        if (o.IndexOf("Access Denied", StringComparison.OrdinalIgnoreCase) >= 0)
-            ds.Filesystem = "access_denied";
-        else if (o.IndexOf("found no problems", StringComparison.OrdinalIgnoreCase) >= 0
-                 || o.IndexOf("No further action", StringComparison.OrdinalIgnoreCase) >= 0)
-            ds.Filesystem = "clean";
-        else if (o.IndexOf("found problems", StringComparison.OrdinalIgnoreCase) >= 0
-                 || o.IndexOf("problems found", StringComparison.OrdinalIgnoreCase) >= 0)
-            ds.Filesystem = "issues";
-        else
-            ds.Filesystem = "unknown";
-
-        var m = Regex.Match(o, @"(\d+)\s+KB in bad sectors");
-        long b;
-        if (m.Success && long.TryParse(m.Groups[1].Value, out b))
-            ds.BadSectorsKb = b;
-        else
-            ds.BadSectorsKb = -1;
-    }
-
-    static SmartState ParseSmart(string output, List<SmartAttrDef> smartAttrs)
-    {
-        var ss = new SmartState
-        {
-            Endurance = -1,
-            ImportantAttrs = new Dictionary<string, long>(),
-            ExtraAttrs = new Dictionary<string, long>()
-        };
-        if (output == null) return ss;
-
-        string o = output;
-        var m = Regex.Match(o, @"Device Model:\s+(.+)");
-        if (m.Success) ss.Model = m.Groups[1].Value.Trim();
-        m = Regex.Match(o, @"Serial Number:\s+(.+)");
-        if (m.Success) ss.Serial = m.Groups[1].Value.Trim();
-        m = Regex.Match(o, @"Firmware Version:\s+(.+)");
-        if (m.Success) ss.Firmware = m.Groups[1].Value.Trim();
-        m = Regex.Match(o, @"SMART overall-health self-assessment test result:\s+(\w+)");
-        if (m.Success) ss.Health = m.Groups[1].Value;
-        m = Regex.Match(o, @"(\d+)\s+---\s+Percentage Used Endurance Indicator");
-        if (m.Success)
-        {
-            int used = int.Parse(m.Groups[1].Value);
-            ss.Endurance = 100 - used;
-        }
-        int importantLimit = smartAttrs.Count < 5 ? smartAttrs.Count : 5;
-        for (int i = 0; i < smartAttrs.Count; i++)
-        {
-            var attr = smartAttrs[i];
-            m = Regex.Match(o,
-                @"^\s*" + attr.Id + @"\s+\S[\S ]*?\S\s+\S+\s+\d+\s+\d+\s+\S+\s+\S\s+(\d+)",
-                RegexOptions.Multiline);
-            if (m.Success)
-            {
-                long val = long.Parse(m.Groups[1].Value);
-                if (i < importantLimit)
-                    ss.ImportantAttrs[attr.Name] = val;
-                else
-                    ss.ExtraAttrs[attr.Name] = val;
-            }
-        }
-        return ss;
-    }
-
-    static string ParseWininit(string output)
-    {
-        if (string.IsNullOrWhiteSpace(output)) return null;
-        var m = Regex.Match(output, @"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})");
-        return m.Success ? m.Groups[1].Value : "found";
     }
 
     public static List<string> Diff(MasterState prev, MasterState curr)
@@ -257,6 +89,20 @@ public static class MasterStateManager
             changes.Add("repair events changed");
 
         return changes;
+    }
+
+    public static string EncodeJson(string s)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append('"');
+        foreach (char c in s)
+        {
+            if (c == '"') sb.Append("\\\"");
+            else if (c == '\\') sb.Append("\\\\");
+            else sb.Append(c);
+        }
+        sb.Append('"');
+        return sb.ToString();
     }
 
     class RawResult

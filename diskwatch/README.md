@@ -282,8 +282,20 @@ diskwatch/
 ├── src/
 │   ├── program.cs           ← Main(), mutex, --remind, runs commands, Event Log reader
 │   ├── commandrunner.cs     ← Process launcher (no timeout)
-│   ├── parser.cs            ← State model, SmartAttrDef, parsing, diff, pretty JSON
-│   └── popup.cs             ← Custom dark monospace dialog with aligned tables
+│   ├── config/
+│   │   ├── commands.cs      ← Command struct + .cmds loading/validation
+│   │   └── smartattrs.cs    ← SmartAttrDef + .smart loading
+│   ├── models/
+│   │   ├── state.cs         ← DriveState, SmartState, MasterState
+│   │   └── persistence.cs   ← MasterStateManager: load/save/diff, JSON mapping
+│   ├── parsers/
+│   │   ├── build.cs         ← MasterStateManager.Build (runs dir → MasterState)
+│   │   ├── chkdsk.cs        ← fsutil dirty + chkdsk output parsing
+│   │   ├── smartctl.cs      ← smartctl output parsing
+│   │   └── wininit.cs       ← wininit repair events parsing
+│   └── popup/
+│       ├── remind.cs        ← Remind dialog: main/extra views, aligned tables
+│       └── scrollpanel.cs   ← CustomScrollPanel (custom slim scrollbar)
 ├── bin/
 │   ├── diskwatch.exe        ← compiled binary (build output)
 │   ├── .cmds                ← commands to run (edit this)
