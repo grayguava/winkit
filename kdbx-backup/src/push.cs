@@ -1,30 +1,13 @@
-// pushToRemote
-//
-// Runs rclone copy from a local source directory to each configured remote
-// sequentially. Exits when all remotes are done.
-//
-// Design notes:
-//  - No external dependencies. Hand-parsed INI config.
-//  - /target:winexe — no console window, runs silently in the background.
-//  - Run-to-completion: starts, syncs all remotes, logs results, exits.
-//    Not a daemon — intended to be triggered by Task Scheduler on a schedule.
-//  - rclone copy (not sync) — remotes are append-only. Nothing is ever
-//    deleted from the cloud even if deleted locally.
-//  - Each remote runs as a child process. stdout and stderr are both
-//    captured and written to the log file.
-
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Threading;
 
 namespace kdbxPushToRemote
 {
     internal static class Program
     {
-        // Resolved configuration.
         private static string SourceDir  = "";
         private static string RclonePath = "rclone";
         private static List<string> Remotes = new List<string>();
@@ -32,19 +15,18 @@ namespace kdbxPushToRemote
         private static string LogFile    = "";
 
         private static readonly object LogLock = new object();
+        private static string CurrentLogDay = "";
 
         private static void Main()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-            LoadConfig(Path.Combine(baseDir, ".conf"), baseDir);
+            LoadConfig(Path.Combine(baseDir, ".push.conf"), baseDir);
             Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
-
-            Log("--- Sync started ---");
 
             if (Remotes.Count == 0)
             {
-                Log("No remotes configured. Check Remotes= in .conf.");
+                Log("No remotes configured. Check Remotes= in .push.conf.");
                 return;
             }
 
@@ -60,8 +42,6 @@ namespace kdbxPushToRemote
                 if (trimmed.Length == 0) continue;
                 SyncRemote(trimmed);
             }
-
-            Log("--- Sync complete ---");
         }
 
         private static void LoadConfig(string configPath, string baseDir)
@@ -81,12 +61,11 @@ namespace kdbxPushToRemote
                 values[key] = val;
             }
 
-            string sourceRaw = values.ContainsKey("PushSourceDir") ? values["PushSourceDir"] : "..\\databaseCopies";
+            string sourceRaw = values.ContainsKey("sourceDir") ? values["sourceDir"] : "..\\databaseCopies";
             SourceDir = Path.IsPathRooted(sourceRaw)
                 ? sourceRaw
                 : Path.GetFullPath(Path.Combine(baseDir, sourceRaw));
 
-            RclonePath = "rclone";
             RemotePath = values.ContainsKey("RemotePath") ? values["RemotePath"] : "kdbx-backup";
 
             if (values.ContainsKey("Remotes"))
@@ -98,7 +77,7 @@ namespace kdbxPushToRemote
                 }
             }
 
-            string logRaw = values.ContainsKey("PushLogFile") ? values["PushLogFile"] : "..\\logs\\push.log";
+            string logRaw = values.ContainsKey("logFile") ? values["logFile"] : "..\\logs\\push.log";
             LogFile = Path.IsPathRooted(logRaw)
                 ? logRaw
                 : Path.GetFullPath(Path.Combine(baseDir, logRaw));
@@ -107,64 +86,50 @@ namespace kdbxPushToRemote
         private static void SyncRemote(string remote)
         {
             string destination = remote + ":" + RemotePath;
-            Log("Syncing to " + destination + " ...");
+            Log("Pushing to " + remote);
 
             var psi = new ProcessStartInfo
             {
                 FileName               = RclonePath,
-                Arguments              = "copy \"" + SourceDir + "\" \"" + destination + "\" --stats-one-line",
+                Arguments              = "copy \"" + SourceDir + "\" \"" + destination + "\"",
                 UseShellExecute        = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError  = true,
                 CreateNoWindow         = true,
             };
-
-            var outputBuffer = new StringBuilder();
-            var errorBuffer  = new StringBuilder();
 
             try
             {
                 using (var process = new Process { StartInfo = psi })
                 {
-                    // Collect stdout and stderr asynchronously to avoid
-                    // deadlocks when both buffers fill simultaneously.
-                    process.OutputDataReceived += (s, e) => {
-                        if (e.Data != null) lock (outputBuffer) { outputBuffer.AppendLine(e.Data); }
-                    };
-                    process.ErrorDataReceived += (s, e) => {
-                        if (e.Data != null) lock (errorBuffer) { errorBuffer.AppendLine(e.Data); }
-                    };
-
                     process.Start();
-                    process.BeginOutputReadLine();
-                    process.BeginErrorReadLine();
                     process.WaitForExit();
 
-                    int exit = process.ExitCode;
-                    string stdout = outputBuffer.ToString().Trim();
-                    string stderr = errorBuffer.ToString().Trim();
-
-                    if (stdout.Length > 0) Log("  [stdout] " + stdout);
-                    if (stderr.Length > 0) Log("  [stderr] " + stderr);
-
-                    if (exit == 0)
-                        Log("  " + remote + ": OK");
+                    if (process.ExitCode == 0)
+                        Log("Push completed to " + remote);
                     else
-                        Log("  " + remote + ": FAILED (exit " + exit + ")");
+                        Log("Push failed to " + remote + " (exit " + process.ExitCode + ")");
                 }
             }
             catch (Exception ex)
             {
-                Log("  " + remote + ": ERROR launching rclone — " + ex.Message);
+                Log("Push failed to " + remote + " (" + ex.Message + ")");
             }
         }
 
         private static void Log(string message)
         {
-            string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + message + Environment.NewLine;
+            string day = DateTime.Now.ToString("dd-MM-yyyy");
+            string time = DateTime.Now.ToString("hh:mm:ss tt");
+
             lock (LogLock)
             {
-                File.AppendAllText(LogFile, line);
+                var sb = new StringBuilder();
+                if (day != CurrentLogDay)
+                {
+                    sb.Append("[").Append(day).Append("]").Append(Environment.NewLine);
+                    CurrentLogDay = day;
+                }
+                sb.Append(time).Append(": ").Append(message).Append(Environment.NewLine);
+                File.AppendAllText(LogFile, sb.ToString());
             }
         }
     }

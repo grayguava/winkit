@@ -10,16 +10,17 @@ changes, creates local timestamped snapshots in `databaseCopies\`.
 
 ## Configuration reference
 
-File: `bin\.conf`
+File: `bin\.watch.conf`
 
 | Key | Required | Default | Description |
 |---|---|---|---|
-| `WatchSourceDir` | yes | — | Directory to watch for `.kdbx` files. Spaces and special characters (e.g. `&`) work fine — no quoting needed, no trailing backslash needed. |
+| `sourceDir` | yes | — | Directory to watch for `.kdbx` files. Spaces and special characters (e.g. `&`) work fine — no quoting needed, no trailing backslash needed. |
 | `DestDir` | no | `snapshots` | Snapshot destination. Relative paths resolve against the `.exe`'s own folder. In production: `D:\Tools\kdbx-backup\databaseCopies` (absolute) or `..\..\databaseCopies` (relative). |
-| `HashAlgo` | no | `SHA256` | Hash algorithm. One of `SHA256`, `SHA1`, `MD5`. Controls both change detection and the manifest filename (`SHA256SUMS.txt`, etc.). |
 | `DebounceSeconds` | no | `5` | Seconds to wait after the last filesystem event on a file before processing. Absorbs multi-event saves. |
-| `WatchLogFile` | no | `logs\watch.log` | Append-only log. In production: `..\logs\watch.log` (shared log folder at project root). |
-| `MaxSnapshots` | no | `15` | Maximum snapshot folders to keep in `DestDir`. Oldest deleted first after each new snapshot. `0` = unlimited. |
+| `logFile` | no | `logs\watch.log` | Append-only log. In production: `..\logs\watch.log` (shared log folder at project root). |
+
+Hashing is always SHA256 — it is hardcoded, not configurable. The snapshot
+manifest is always named `SHA256SUMS.txt`.
 
 ---
 
@@ -29,7 +30,7 @@ File: `bin\.conf`
 
 1. Acquire named mutex `Global\kdbxWatchSingleInstance`. If already
    held → exit immediately, silently (another instance is running).
-2. Load `.conf` from the `.exe`'s own directory.
+2. Load `.watch.conf` from the `.exe`'s own directory.
 3. Create `DestDir` and `LogFile` parent directories if missing.
 4. Log `Started. Watching: <SourceDir>`.
 5. Call `TakeBaselineSnapshot()`.
@@ -43,9 +44,10 @@ On every startup, the watcher checks whether anything has changed since
 the last run *before* deciding to copy:
 
 1. Hash all `.kdbx` files currently in `SourceDir`.
-2. Read the most recent snapshot folder's `*SUMS.txt` manifest (found by
-   sorting `DestDir` subdirectory names — the `yyyy-MM-dd_HH-mm-ss_`
-   prefix makes string sort = chronological sort, no date parsing needed).
+2. Read the most recent snapshot folder's `SHA256SUMS.txt` manifest. The
+   newest snapshot is found by walking the `DestDir\MM\dd\HHmmss`
+   hierarchy — each level is zero-padded, so the lexicographically last
+   entry at each level is the newest. No date parsing needed.
 3. Compare current hashes against manifest hashes.
 4. **If identical:** load hashes into memory, log "Baseline unchanged,
    skipping snapshot", do not copy. This prevents redundant duplicate
@@ -98,13 +100,14 @@ When `OnDebounceElapsed` fires for a file:
    (e.g. a backup or AV tool touching the file without modifying it).
    KeePassXC itself won't trigger this — it doesn't write the file at all
    unless content changed.
-7. **If different:** call `TakeSnapshot(newHash)`.
+7. **If different:** call `TakeSnapshot()`.
 
 ### Snapshot creation
 
 `TakeSnapshot` (called while holding `StateLock`):
 
-1. Create a new folder: `DestDir\yyyy-MM-dd_HH-mm-ss_<first8charsOfTriggeringHash>\`
+1. Create a new folder at `DestDir\MM\dd\HHmmss` (current local date and
+   time — e.g. `databaseCopies\08\02\122620`).
 2. Copy **all** `.kdbx` files from `SourceDir` into it — not just the
    triggering file. Every snapshot is a complete point-in-time backup of
    the whole set.
@@ -113,25 +116,18 @@ When `OnDebounceElapsed` fires for a file:
    folder, not what was in the source at the time of copy. A copy
    corrupted in transit (disk error, AV interference) would produce a
    different hash and be caught.
-4. Write `SHA256SUMS.txt` (or `SHA1SUMS.txt` / `MD5SUMS.txt`) with
-   `filename: hash` per line, sorted by filename for stable diffs.
+4. Write `SHA256SUMS.txt` with `filename: hash` per line, sorted by
+   filename for stable diffs.
 5. Update `LastHashes` for every file in the snapshot (not just the
    triggering file) — since the snapshot just captured all of them, the
    baseline for all should reflect the snapshot's state.
-6. Call `PruneOldSnapshots()`.
 
-### Pruning
+### No automatic pruning
 
-After every snapshot (baseline or change-triggered):
-
-1. List all subdirectories in `DestDir`.
-2. Sort by name (= chronological order).
-3. If count > `MaxSnapshots`, delete the oldest `count - MaxSnapshots`
-   folders.
-4. Log each deletion. Catch `IOException` per folder (locked folder is
-   skipped and logged, not a fatal error).
-
-`MaxSnapshots=0` skips pruning entirely.
+Snapshots are never deleted automatically. Local `DestDir` and the cloud
+archive both grow unbounded — prune `DestDir\MM\` month folders manually
+when they get large. There is deliberately no retention policy, so the
+cloud keeps every snapshot that ever existed locally.
 
 ---
 
@@ -176,7 +172,7 @@ launches; the Task Scheduler setting handles automated re-triggers.
 
 ## Path resolution
 
-All relative paths in `.conf` resolve against
+All relative paths in `.watch.conf` resolve against
 `AppDomain.CurrentDomain.BaseDirectory` — the directory containing the
 `.exe` file, not the process's current working directory.
 
@@ -197,12 +193,31 @@ Tested 2026-06-29 / 2026-07-02:
 - ✅ Real edit in KeePassXC → debounce → snapshot of all files.
 - ✅ Two separate real edits → two separate snapshots.
 - ✅ No-op open/close in KeePassXC → no filesystem write, no log entry.
-- ✅ Source path with spaces and `&` works unquoted in `.conf`.
+- ✅ Source path with spaces and `&` works unquoted in `.watch.conf`.
 - ✅ Double-clicking `.exe` while already running → second instance exits
   silently, first instance unaffected.
-- ✅ `MaxSnapshots` pruning — oldest folders deleted after limit exceeded.
+- ✅ Restart across midnight → next log entry starts a new `[dd-MM-yyyy]`
+  header block.
 - ⬜ Hash-unchanged skip — not naturally triggered by KeePassXC; only
   fires if another tool writes to the source folder without changing content.
+
+---
+
+## Log format
+
+Append-only text file. A `[dd-MM-yyyy]` header is written the first time
+something is logged on a given day, and each entry is time-only
+(`hh:mm:ss tt`, no repeated date) followed by two spaces and the message:
+
+```
+[01-08-2026]
+20:57:09  Started. Watching: D:\...\KeePassXC\DB
+20:57:09  Change detected: db-jretd.kdbx
+20:57:09  Snapshot created: 08\01\205709 (5 files)
+
+[02-08-2026]
+12:01:42  Baseline unchanged since last run, skipping snapshot (5 files).
+```
 
 ---
 
@@ -217,6 +232,7 @@ Tested 2026-06-29 / 2026-07-02:
   produce two separate snapshots (both containing all files), not one
   merged snapshot. This keeps the logic simple at the cost of occasional
   near-duplicate snapshots during multi-file edit sessions.
-- **`databaseCopies\` contains non-snapshot subdirectories:** `PruneOldSnapshots`
-  sorts and counts all subdirectories, not just ones matching the snapshot
-  naming pattern. Don't manually create subfolders inside `databaseCopies\`.
+- **`databaseCopies\` contains non-snapshot subdirectories:** the newest-snapshot
+  walk sorts all subdirectories at each level and picks the last one. Don't
+  manually create subfolders inside `databaseCopies\` (a stray folder could
+  be picked as the "newest" snapshot when searching for the baseline manifest).

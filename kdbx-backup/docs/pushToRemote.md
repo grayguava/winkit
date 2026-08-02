@@ -11,15 +11,16 @@ exits when done.
 
 ## Configuration reference
 
-File: `bin\.conf`
+File: `bin\.push.conf`
 
 | Key | Required | Default | Description |
 |---|---|---|---|
-| `PushSourceDir` | no | `..\databaseCopies` | Local folder to push. Relative paths resolve against the `.exe`'s own folder. |
-| `RclonePath` | no | `rclone` | *(deprecated — ignored, hardcoded to `rclone`)* |
+| `sourceDir` | no | `..\databaseCopies` | Local folder to push. Relative paths resolve against the `.exe`'s own folder. |
 | `Remotes` | no | — | Comma-separated rclone remote names. Must match names in `rclone config` exactly (case-sensitive). |
 | `RemotePath` | no | `kdbx-backup` | Folder name to create inside each remote. |
-| `PushLogFile` | no | `..\logs\rclone.log` | Append-only log. Shared with the watcher's log folder at `kdbx-backup\logs\`. |
+| `logFile` | no | `..\logs\push.log` | Append-only log. The shipped config uses `..\logs\rclone.log`; both land in the shared `kdbx-backup\logs\` folder. |
+
+rclone is always launched as `rclone` from PATH — not configurable.
 
 ---
 
@@ -29,25 +30,16 @@ This is the most important design decision in this tool and worth being
 explicit about.
 
 `rclone sync` mirrors the source to the destination *exactly*, including
-**deleting from the remote anything not present locally**. Since
-`kdbxWatch` enforces `MaxSnapshots=15` locally, old snapshot folders get
-pruned from `databaseCopies\` over time. If `rclone sync` were used:
-
-1. kdbxWatch creates snapshot #16 → prunes snapshot #1 locally.
-2. kdbxPushToRemote runs → sees snapshot #1 missing locally → deletes it
-   from all three cloud remotes.
-
-Result: the cloud retains exactly the same 15 snapshots as local disk,
-making it worthless as a long-term archive. The entire point of cloud
-backup is to retain history beyond what's kept locally.
-
-`rclone copy` only uploads what's missing on the remote. It never
-deletes. The cloud becomes an append-only archive — every snapshot ever
-created locally exists on the remote forever, regardless of local pruning.
+**deleting from the remote anything not present locally**. If `rclone sync`
+were used, anything pruned or removed from `databaseCopies\` locally would
+be deleted from all cloud remotes too — defeating the purpose of cloud
+backup, which is to retain history. `rclone copy` only uploads what's
+missing on the remote and never deletes anything. The cloud becomes an
+append-only archive of every snapshot that ever existed locally.
 
 **Summary:**
-- `rclone copy` → cloud grows indefinitely, local stays capped. ✅
-- `rclone sync` → cloud mirrors local, pruning applies to both. ❌
+- `rclone copy` → cloud grows indefinitely, local never auto-deleted. ✅
+- `rclone sync` → cloud mirrors local, any local cleanup deletes remotely too. ❌
 
 ---
 
@@ -121,19 +113,19 @@ the "If task is already running → Do not start a new instance" setting.
 - **Start in:** `D:\Tools\kdbx-backup\bin\`
 - **Settings → If task is already running:** Do not start a new instance
 
-The "Start in" field matters: without it, relative paths in `.conf`
-(`PushSourceDir=..\databaseCopies`, `PushLogFile=..\logs\rclone.log`) would
+The "Start in" field matters: without it, relative paths in `.push.conf`
+(`sourceDir=..\databaseCopies`, `logFile=..\logs\rclone.log`) would
 resolve against Task Scheduler's own working directory rather than the
 `.exe`'s folder. Setting "Start in" ensures they resolve correctly.
 
-Alternatively, use absolute paths in `.conf` to make this
+Alternatively, use absolute paths in `.push.conf` to make this
 Task Scheduler dependency disappear entirely.
 
 ---
 
 ## Path resolution
 
-Same pattern as `kdbxWatch`: relative paths in `.conf` are resolved
+Same pattern as `kdbxWatch`: relative paths in `.push.conf` are resolved
 via `Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, relPath))`.
 
 `AppDomain.CurrentDomain.BaseDirectory` = the folder containing
@@ -144,29 +136,34 @@ full reasoning — same principle applies here.
 
 ## Log format
 
-Entries in `logs\rclone.log`:
+Append-only text file. A `[dd-MM-yyyy]` header is written the first time
+something is logged on a given day, and each entry is time-only
+(`hh:mm:ss tt`, no repeated date) followed by a colon, a space, and the
+message:
 
 ```
-2026-07-02 15:00:01  --- Push started ---
-2026-07-02 15:00:01  Syncing to Google:kdbx-backup ...
-2026-07-02 15:00:08    [stderr] <rclone stats output>
-2026-07-02 15:00:08    Google: OK
-2026-07-02 15:00:08  Syncing to Dropbox:kdbx-backup ...
-2026-07-02 15:00:14    Dropbox: OK
-2026-07-02 15:00:14  Syncing to Koofr:kdbx-backup ...
-2026-07-02 15:00:19    Koofr: OK
-2026-07-02 15:00:19  --- Push complete ---
+[12-07-2026]
+06:00:45 PM: Pushing to Koofr
+06:00:50 PM: Push completed to Koofr
+07:00:00 PM: Pushing to Google
+07:00:44 PM: Push completed to Google
 ```
 
-rclone's own output (stats, errors) appears as `[stdout]` / `[stderr]`
-lines indented under the remote name. A failed upload shows rclone's
-error message in `[stderr]` followed by `FAILED (exit 1)`.
+Per-remote messages:
+
+- `Pushing to <Remote>` — starting the rclone copy for that remote.
+- `Push completed to <Remote>` — rclone exited 0.
+- `Push failed to <Remote> (exit N)` — rclone exited non-zero (e.g. exit 1
+  on a network failure). rclone's own stdout/stderr is not logged — the
+  failure line is the only record.
+- `Push failed to <Remote> (<message>)` — rclone could not be launched at
+  all (e.g. not on PATH).
 
 ---
 
 ## Adding or removing a remote
 
-Edit `Remotes=` in `.conf`. No recompile needed. Example — add a
+Edit `Remotes=` in `.push.conf`. No recompile needed. Example — add a
 fourth remote:
 
 ```ini

@@ -1,21 +1,3 @@
-// kdbxWatch
-//
-// Watches a source directory for changes to .kdbx files. When a file's
-// content actually changes (verified by hash, not just by filesystem event),
-// it takes a fresh snapshot of ALL .kdbx files in the source directory into
-// a new timestamped folder under DestDir.
-//
-// Design notes:
-//  - No external dependencies. Hand-parsed INI config.
-//  - No persisted state. Last-known hashes live in memory only; on startup
-//    we hash everything fresh and take an immediate baseline snapshot.
-//  - Per-file debounce timers absorb multiple filesystem events from a
-//    single save (e.g. write + rename).
-//  - A single lock guards the "compare hash -> decide -> snapshot -> update
-//    baseline" sequence so concurrent timer callbacks can't race.
-//  - Source files are only ever read and copied from. Never modified,
-//    renamed, or deleted.
-
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -27,20 +9,18 @@ namespace kdbxWatch
 {
     internal static class Program
     {
-        // Resolved configuration.
         private static string SourceDir = "";
         private static string DestDir = "";
-        private static string HashAlgo = "SHA256";
         private static int DebounceMs = 5000;
         private static string LogFile = "";
 
-        // In-memory state. Guarded by StateLock.
         private static readonly Dictionary<string, string> LastHashes =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, Timer> DebounceTimers =
             new Dictionary<string, Timer>(StringComparer.OrdinalIgnoreCase);
         private static readonly object StateLock = new object();
         private static readonly object LogLock = new object();
+        private static string CurrentLogDay = "";
 
         private static Mutex SingleInstanceMutex;
 
@@ -51,22 +31,17 @@ namespace kdbxWatch
 
             if (!isNewInstance)
             {
-                // Another instance already owns the mutex. Exit immediately
-                // without touching config or the log file.
                 return;
             }
 
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-            LoadConfig(Path.Combine(baseDir, ".conf"), baseDir);
+            LoadConfig(Path.Combine(baseDir, ".watch.conf"), baseDir);
             Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
             Directory.CreateDirectory(DestDir);
 
             Log("Started. Watching: " + SourceDir);
 
-            // Baseline: hash everything currently present and take an
-            // immediate snapshot. This both seeds LastHashes and guarantees
-            // a known-good starting snapshot exists.
             TakeBaselineSnapshot();
 
             using (var watcher = new FileSystemWatcher(SourceDir, "*.kdbx"))
@@ -77,9 +52,6 @@ namespace kdbxWatch
                 watcher.Renamed += OnFileRenamed;
                 watcher.EnableRaisingEvents = true;
 
-                // Block forever. Task Scheduler / Task Manager will end the
-                // process on logoff; no graceful shutdown logic needed for
-                // a personal utility like this.
                 new ManualResetEvent(false).WaitOne();
             }
         }
@@ -101,8 +73,7 @@ namespace kdbxWatch
                 values[key] = val;
             }
 
-            SourceDir = RequireValue(values, "WatchSourceDir");
-            HashAlgo = values.ContainsKey("HashAlgo") ? values["HashAlgo"] : "SHA256";
+            SourceDir = RequireValue(values, "sourceDir");
             DebounceMs = (values.ContainsKey("DebounceSeconds")
                 ? int.Parse(values["DebounceSeconds"])
                 : 5) * 1000;
@@ -110,7 +81,7 @@ namespace kdbxWatch
             string destRaw = values.ContainsKey("DestDir") ? values["DestDir"] : "snapshots";
             DestDir = Path.IsPathRooted(destRaw) ? destRaw : Path.Combine(baseDir, destRaw);
 
-            string logRaw = values.ContainsKey("WatchLogFile") ? values["WatchLogFile"] : "logs\\watch.log";
+            string logRaw = values.ContainsKey("logFile") ? values["logFile"] : "logs\\watch.log";
             LogFile = Path.IsPathRooted(logRaw) ? logRaw : Path.Combine(baseDir, logRaw);
         }
 
@@ -121,8 +92,6 @@ namespace kdbxWatch
             return values[key];
         }
 
-        // --- Filesystem event handling -------------------------------------------------
-
         private static void OnFileEvent(object sender, FileSystemEventArgs e)
         {
             ScheduleDebounce(e.Name);
@@ -130,7 +99,6 @@ namespace kdbxWatch
 
         private static void OnFileRenamed(object sender, RenamedEventArgs e)
         {
-            // Covers editors that write to a temp file then rename into place.
             ScheduleDebounce(e.Name);
         }
 
@@ -159,7 +127,6 @@ namespace kdbxWatch
 
             lock (StateLock)
             {
-                // Timer has fired; remove it so a future event schedules a fresh one.
                 Timer timer;
                 if (DebounceTimers.TryGetValue(fileName, out timer))
                 {
@@ -180,8 +147,6 @@ namespace kdbxWatch
                 }
                 catch (IOException)
                 {
-                    // File still locked/being written despite the debounce wait.
-                    // Reschedule rather than failing silently.
                     Log("File locked, rescheduling: " + fileName);
                     ScheduleDebounce(fileName);
                     return;
@@ -199,11 +164,9 @@ namespace kdbxWatch
             }
         }
 
-        // --- Hashing ---------------------------------------------------------------
-
         private static string ComputeHash(string path)
         {
-            using (HashAlgorithm algo = CreateHashAlgorithm())
+            using (HashAlgorithm algo = SHA256.Create())
             using (FileStream stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 byte[] hash = algo.ComputeHash(stream);
@@ -212,19 +175,6 @@ namespace kdbxWatch
                 return sb.ToString();
             }
         }
-
-        private static HashAlgorithm CreateHashAlgorithm()
-        {
-            switch (HashAlgo.ToUpperInvariant())
-            {
-                case "SHA1": return SHA1.Create();
-                case "MD5": return MD5.Create();
-                case "SHA256":
-                default: return SHA256.Create();
-            }
-        }
-
-        // --- Snapshotting ------------------------------------------------------------
 
         private static void TakeBaselineSnapshot()
         {
@@ -238,8 +188,6 @@ namespace kdbxWatch
                     return;
                 }
 
-                // Compute current hashes first so we can compare against the
-                // most recent existing snapshot before deciding to copy.
                 var currentHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (string f in files)
                 {
@@ -277,10 +225,6 @@ namespace kdbxWatch
             return true;
         }
 
-        // Finds the most recent snapshot folder under DestDir by walking the
-        // MM -> dd -> HHmmss hierarchy. All levels sort correctly as strings
-        // (zero-padded numbers), so the last entry at each level is newest.
-        // Returns null if no snapshot exists or the manifest can't be read.
         private static Dictionary<string, string> LoadMostRecentSnapshotHashes()
         {
             if (!Directory.Exists(DestDir)) return null;
@@ -288,7 +232,7 @@ namespace kdbxWatch
             string newestLeaf = FindNewestLeaf(DestDir, 3);
             if (newestLeaf == null) return null;
 
-            string[] sumsFiles = Directory.GetFiles(newestLeaf, "*SUMS.txt");
+            string[] sumsFiles = Directory.GetFiles(newestLeaf, "SHA256SUMS.txt");
             if (sumsFiles.Length == 0) return null;
 
             var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -309,14 +253,12 @@ namespace kdbxWatch
             }
             catch (IOException)
             {
-                return null; // unreadable manifest -> fall back to taking a fresh snapshot
+                return null;
             }
 
             return hashes;
         }
 
-        // Recursively finds the lexicographically last leaf directory at the
-        // given depth. depth=3 means MM/dd/HHmmss — three levels down.
         private static string FindNewestLeaf(string dir, int depth)
         {
             string[] children = Directory.GetDirectories(dir);
@@ -329,15 +271,12 @@ namespace kdbxWatch
             return FindNewestLeaf(newest, depth - 1);
         }
 
-        // Caller must hold StateLock.
         private static void TakeSnapshot()
         {
             string snapshotDir = CreateSnapshotDir();
             Dictionary<string, string> hashes;
             int count = CopyAllKdbxFiles(snapshotDir, out hashes);
 
-            // Refresh baseline for every file, since the snapshot just
-            // captured the current state of all of them.
             foreach (var pair in hashes) LastHashes[pair.Key] = pair.Value;
 
             Log("Snapshot created: " + snapshotDir.Substring(DestDir.Length).TrimStart(Path.DirectorySeparatorChar) + " (" + count + " files)");
@@ -366,7 +305,7 @@ namespace kdbxWatch
                 string dest = Path.Combine(snapshotDir, fileName);
                 File.Copy(f, dest, overwrite: true);
 
-                string hash = ComputeHash(dest); // hash the copy, proof matches what's actually in the snapshot
+                string hash = ComputeHash(dest);
                 hashes[fileName] = hash;
                 count++;
             }
@@ -377,7 +316,7 @@ namespace kdbxWatch
 
         private static void WriteSumsFile(string snapshotDir, Dictionary<string, string> hashes)
         {
-            string sumsFileName = HashAlgo.ToUpperInvariant() + "SUMS.txt";
+            string sumsFileName = "SHA256SUMS.txt";
             string sumsPath = Path.Combine(snapshotDir, sumsFileName);
 
             var fileNames = new List<string>(hashes.Keys);
@@ -392,14 +331,21 @@ namespace kdbxWatch
             File.WriteAllText(sumsPath, sb.ToString());
         }
 
-        // --- Logging -----------------------------------------------------------------
-
         private static void Log(string message)
         {
-            string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + message + Environment.NewLine;
+            string day = DateTime.Now.ToString("dd-MM-yyyy");
+            string time = DateTime.Now.ToString("hh:mm:ss tt");
+
             lock (LogLock)
             {
-                File.AppendAllText(LogFile, line);
+                var sb = new StringBuilder();
+                if (day != CurrentLogDay)
+                {
+                    sb.Append("[").Append(day).Append("]").Append(Environment.NewLine);
+                    CurrentLogDay = day;
+                }
+                sb.Append(time).Append("  ").Append(message).Append(Environment.NewLine);
+                File.AppendAllText(LogFile, sb.ToString());
             }
         }
     }

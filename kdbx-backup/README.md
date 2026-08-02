@@ -19,7 +19,7 @@ kdbxWatch.exe (always running, event-driven)
   copies ALL .kdbx files into a new timestamped snapshot folder
         ↓
 databaseCopies/
-  YYYY-MM-DD_HH-mm-ss_<hash>/
+  MM/dd/HHmmss/              ← e.g. 08/02/122620
     *.kdbx + SHA256SUMS.txt
         ↓
 kdbxPushToRemote.exe (scheduled, run-to-completion)
@@ -61,7 +61,8 @@ kdbx-backup/
 ├── bin/
 │   ├── kdbxWatch.exe            ← compiled binary
 │   ├── kdbxPushToRemote.exe     ← compiled binary
-│   └──  .conf                   ← central config (shared by both)
+│   ├── .watch.conf              ← kdbxWatch config (edit this)
+│   └── .push.conf               ← kdbxPushToRemote config (edit this)
 ├── databaseCopies/              ← local snapshot destination (auto-created)
 ├── logs/                        ← shared log folder (auto-created)
 └── README.md
@@ -91,7 +92,7 @@ Unlike the watcher, this tool exits on its own when done. The "do not start a ne
 
 ### Config files
 
-Both tools use flat `key=value` INI files in their `bin/` directories — no TOML, JSON, or XML parser. Paths are relative to the `.exe` location (`AppDomain.CurrentDomain.BaseDirectory`), not CWD, so they work reliably regardless of how the process is launched.
+Both tools use flat `key=value` INI files in their `bin/` directories — `kdbxWatch` reads `.watch.conf`, `kdbxPushToRemote` reads `.push.conf`. No TOML, JSON, or XML parser. Paths are relative to the `.exe` location (`AppDomain.CurrentDomain.BaseDirectory`), not CWD, so they work reliably regardless of how the process is launched.
 
 ---
 
@@ -107,7 +108,7 @@ Genuine redundancy requires providers that fail independently. Three providers (
 
 ### Why rclone copy and not rclone sync
 
-`rclone sync` mirrors source to destination and **deletes from the remote anything not present locally**. Since `kdbxWatch` enforces a `MaxSnapshots` limit locally (default 15), old snapshot folders get pruned from `databaseCopies/` over time. If `rclone sync` were used, it would delete those same folders from the cloud — defeating the purpose of cloud backup, which is to retain history even after local pruning. `rclone copy` only uploads what's missing on the remote and never deletes anything. The cloud becomes an append-only archive of every snapshot that ever existed locally.
+`rclone sync` mirrors source to destination and **deletes from the remote anything not present locally**. If `rclone sync` were used, any snapshot removed from `databaseCopies/` locally would be deleted from all three cloud remotes too — defeating the purpose of cloud backup, which is to retain history. `rclone copy` only uploads what's missing on the remote and never deletes anything. The cloud becomes an append-only archive of every snapshot that ever existed locally.
 
 ### The bootstrap problem
 
@@ -161,6 +162,6 @@ Every backup strategy has a stopping point. The residual risk here is the simult
 - **Windows-only** — compiled with `csc.exe` against .NET Framework 4.0. Both tools use Windows-specific APIs (`FileSystemWatcher`, named mutexes, `winexe`).
 - **rclone must be on PATH** for `kdbxPushToRemote`. No fallback if rclone is missing or misconfigured.
 - **No web UI or dashboard** — all monitoring is via log files. No alerting on push failure.
-- **MaxSnapshots is local-only** — the cloud archive grows unbounded. No remote retention policy is enforced.
+- **No automatic retention** — snapshots are never pruned automatically, so both the local `databaseCopies/` and the cloud archive grow unbounded. Purge old local `MM/` month folders manually when they get large; the cloud keeps everything.
 - **kdbxWatch can miss rapid saves** — debouncing prevents storming, but very fast successive saves (under the debounce window) are coalesced into one snapshot.
 - **No encryption at rest in logs** — log files contain filenames and timestamps but no credentials. Review access controls if logs are stored on shared volumes.
