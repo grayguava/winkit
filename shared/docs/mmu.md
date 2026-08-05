@@ -1,31 +1,40 @@
-# ymdl — YouTube/YT Music audio downloader
+# mmu — my music util
 
-Wraps yt-dlp into a simple two-argument command. Downloads the highest quality audio available without re-encoding (Opus or AAC).
+Single-binary music utility. Today it downloads audio from YouTube/YT Music;
+future commands (e.g. cutting ads out of local files) will reuse the same
+binary and config.
 
 ```
-ymdl <url> "filename"
+mmu -d
 ```
 
-- **url** — YouTube or YouTube Music link
-- **filename** — output name without extension (ymdl appends the correct extension)
+Starts an interactive download session:
+
+- **Paste link** — YouTube or YouTube Music link
+- **Filename (optional)** — output name without extension (mmu appends the
+  correct extension). Press Enter to use the video title.
 
 ### Examples
 
 ```
-ymdl "https://youtu.be/dQw4w9WgXcQ" "Rick Astley - Never Gonna Give You Up"
-ymdl "https://music.youtube.com/watch?v=..." "Song Name"
+C:\> mmu -d
+Paste link: https://youtu.be/dQw4w9WgXcQ
+Filename (Enter to use the title): Rick Astley - Never Gonna Give You Up
+Downloading...
+
+✨ Done. Saved to "D:\Music"
 ```
 
 ### Requirements
 
-- `yt-dlp.exe` — on PATH, placed alongside ymdl.exe, or specified in `.ymdl` config
-- `ffmpeg.exe` — alongside ymdl.exe or in `ffmpeg/bin/` (optional but recommended)
+- `yt-dlp.exe` — on PATH, placed alongside mmu.exe, or specified in `.mmuconfig`
+- `ffmpeg.exe` — alongside mmu.exe or in `ffmpeg/bin/` (optional but recommended)
 
 ## Configuration
 
-### .ymdl
+### .mmuconfig
 
-**Location:** `conf/.ymdl`
+**Location:** `conf/.mmuconfig`
 
 ```ini
 ; ytdlp:  "default" for PATH detection, or full path to yt-dlp.exe
@@ -54,26 +63,27 @@ Passed via `--config-location` so yt-dlp ignores all other config files. Contain
 - Embed metadata and thumbnail
 - No playlists
 - Windows-safe filenames
-- Quiet output (ymdl prints its own success message)
+- Quiet output (mmu prints its own success message)
 
 Edit freely — no recompilation needed.
 
 ## How it works
 
-1. Reads `conf/.ymdl` for yt-dlp path and output directory.
+1. Reads `conf/.mmuconfig` for yt-dlp path and output directory.
 2. Resolves `conf/yt-dlp.conf` relative to the .exe location.
-3. Locates `yt-dlp.exe` — explicit path from `.ymdl`, alongside binary, or via PATH.
+3. Locates `yt-dlp.exe` — explicit path from `.mmuconfig`, alongside binary, or via PATH.
 4. Locates `ffmpeg.exe` (alongside binary or in `ffmpeg/bin/`).
-5. Sanitizes the filename (removes invalid Windows filename characters).
+5. Sanitizes the filename if one was given (removes invalid Windows filename characters).
 6. Runs yt-dlp with `--config-location` pointing at `conf/yt-dlp.conf`.
-7. On success, prints the output filename and target directory.
+7. On success, prints `✨ Done. Saved to "<dir>"`.
 
 ## Design decisions
 
 - **No transcoding:** `--audio-format best` keeps the original codec (Opus or AAC). No quality loss from re-encoding.
-- **Config over flags:** Both yt-dlp and ymdl use config files instead of long argument strings. Easy to tweak without recompilation.
+- **Config over flags:** Both yt-dlp and mmu use config files instead of long argument strings. Easy to tweak without recompilation.
 - **Self-contained:** The wrapper locates everything relative to its own directory when using alongside-binary placement. Alternatively, use PATH with `ytdlp=default`.
-- **Clean output:** yt-dlp's verbose progress is suppressed. ymdl prints only `✔ filename.ext` and the save path.
+- **Clean output:** yt-dlp's verbose progress is suppressed. mmu prints a single `✨ Done. Saved to "<dir>"` line.
+- **Extensible:** `mmu -d` is one dispatch branch; future subcommands (`-c` for cutting) add new branches without changing the download behavior.
 
 ## Known limitations
 

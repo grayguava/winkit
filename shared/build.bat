@@ -29,8 +29,8 @@ echo Building etsu...
 "%CSC%" /nologo /optimize+ /reference:System.Windows.Forms.dll /target:exe /out:bin\etsu.exe src\etsu\*.cs
 if %ERRORLEVEL% NEQ 0 exit /b 1
 
-echo Building ymdl...
-"%CSC%" /nologo /optimize+ /target:exe /out:bin\ymdl.exe src\ymdl.cs
+echo Building mmu...
+"%CSC%" /nologo /optimize+ /target:exe /out:bin\mmu.exe src\mmu\*.cs
 if %ERRORLEVEL% NEQ 0 exit /b 1
 
 echo All builds succeeded.

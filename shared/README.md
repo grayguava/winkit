@@ -13,7 +13,7 @@ Each tool is fully independent — removing one .exe and its config file won't a
 | **catsort** | Category-based file sorting by extension | [docs/catsort.md](docs/catsort.md) |
 | **reindex** | Sequential file renaming with rollback | [docs/reindex.md](docs/reindex.md) |
 | **etsu** | ExifTool frontend (read, clean, date) | [docs/etsu.md](docs/etsu.md) |
-| **ymdl** | YouTube/YT Music audio downloader | [docs/ymdl.md](docs/ymdl.md) |
+| **mmu** | My music util (audio download, more later) | [docs/mmu.md](docs/mmu.md) |
 
 ## PATH setup
 
@@ -51,21 +51,23 @@ shared/
 │       ├── read.cs           ← metadata viewer
 │       ├── clean.cs          ← metadata stripper
 │       └── date.cs           ← date setter
-│   └── ymdl.cs              ← YouTube/YT Music downloader wrapper
+│   └── mmu/
+│       ├── mmu.cs           ← main entry + shared helpers
+│       └── download.cs       ← audio downloader
 ├── bin/
 │   ├── dirdiff.exe          ← compiled binary (build output)
 │   ├── delcache.exe         ← compiled binary (build output)
 │   ├── catsort.exe          ← compiled binary (build output)
 │   ├── reindex.exe          ← compiled binary (build output)
 │   ├── etsu.exe             ← compiled binary (build output)
-│   └── ymdl.exe             ← compiled binary (build output)
+│   └── mmu.exe              ← compiled binary (build output)
 ├── conf/
 │   ├── .thr                 ← dirdiff parallel hash threads (default 8)
 │   ├── .cdirs               ← delcache configuration
 │   ├── .cats                ← catsort configuration
 │   ├── .indexignore         ← reindex skip list
-│   ├── yt-dlp.conf          ← yt-dlp flags (ymdl)
-│   ├── .ymdl               ← yt-dlp path + download dir (ymdl)
+│   ├── .mmuconfig           ← mmu dependency paths + download dir
+│   ├── yt-dlp.conf          ← yt-dlp flags (mmu)
 │   └── logs/reindex/        ← rollback history (auto, 25 newest kept)
 ├── docs/
 │   ├── delcache.md
@@ -73,7 +75,7 @@ shared/
 │   ├── catsort.md
 │   ├── reindex.md
 │   ├── etsu.md
-│   └── ymdl.md
+│   └── mmu.md
 ├── build.bat
 └── README.md
 ```
