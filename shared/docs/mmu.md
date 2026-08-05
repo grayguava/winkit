@@ -27,14 +27,14 @@ Downloading...
 
 ### Requirements
 
-- `yt-dlp.exe` — on PATH, placed alongside mmu.exe, or specified in `.mmuconfig`
+- `yt-dlp.exe` — on PATH, placed alongside mmu.exe, or specified in `.conf`
 - `ffmpeg.exe` — alongside mmu.exe or in `ffmpeg/bin/` (optional but recommended)
 
 ## Configuration
 
-### .mmuconfig
+### .conf
 
-**Location:** `conf/.mmuconfig`
+**Location:** `conf/mmu/.conf`
 
 ```ini
 ; ytdlp:  "default" for PATH detection, or full path to yt-dlp.exe
@@ -54,7 +54,7 @@ outdir=D:\Music
 
 ### yt-dlp.conf
 
-**Location:** `conf/yt-dlp.conf`
+**Location:** `conf/mmu/yt-dlp.conf`
 
 Passed via `--config-location` so yt-dlp ignores all other config files. Contains sensible defaults:
 
@@ -69,12 +69,12 @@ Edit freely — no recompilation needed.
 
 ## How it works
 
-1. Reads `conf/.mmuconfig` for yt-dlp path and output directory.
-2. Resolves `conf/yt-dlp.conf` relative to the .exe location.
-3. Locates `yt-dlp.exe` — explicit path from `.mmuconfig`, alongside binary, or via PATH.
+1. Reads `conf/mmu/.conf` for yt-dlp path and output directory.
+2. Resolves `conf/mmu/yt-dlp.conf` relative to the .exe location.
+3. Locates `yt-dlp.exe` — explicit path from `.conf`, alongside binary, or via PATH.
 4. Locates `ffmpeg.exe` (alongside binary or in `ffmpeg/bin/`).
 5. Sanitizes the filename if one was given (removes invalid Windows filename characters).
-6. Runs yt-dlp with `--config-location` pointing at `conf/yt-dlp.conf`.
+6. Runs yt-dlp with `--config-location` pointing at `conf/mmu/yt-dlp.conf`.
 7. On success, prints `✨ Done. Saved to "<dir>"`.
 
 ## Design decisions

@@ -66,8 +66,9 @@ shared/
 │   ├── .cdirs               ← delcache configuration
 │   ├── .cats                ← catsort configuration
 │   ├── .indexignore         ← reindex skip list
-│   ├── .mmuconfig           ← mmu dependency paths + download dir
-│   ├── yt-dlp.conf          ← yt-dlp flags (mmu)
+│   ├── mmu/
+│   │   ├── .mmuconfig       ← mmu dependency paths + download dir
+│   │   └── yt-dlp.conf      ← yt-dlp flags (mmu)
 │   └── logs/reindex/        ← rollback history (auto, 25 newest kept)
 ├── docs/
 │   ├── delcache.md

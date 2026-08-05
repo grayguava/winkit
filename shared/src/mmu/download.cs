@@ -7,9 +7,9 @@ class DownloadTool
     public static int Run()
     {
         string baseDir = Mmu.ExeDir();
-        string confDir = Path.GetFullPath(Path.Combine(baseDir, "..", "conf"));
+        string confDir = Path.GetFullPath(Path.Combine(baseDir, "..", "conf", "mmu"));
 
-        string dotConfig = Path.Combine(confDir, ".mmuconfig");
+        string dotConfig = Path.Combine(confDir, ".conf");
         string ytdlpCfg = File.Exists(dotConfig) ? Mmu.ReadConfValue(dotConfig, "ytdlp") : null;
         string ffmpegCfg = File.Exists(dotConfig) ? Mmu.ReadConfValue(dotConfig, "ffmpeg") : null;
 
@@ -17,7 +17,7 @@ class DownloadTool
         if (ytDlpExe == null)
         {
             Console.Error.WriteLine("yt-dlp.exe not found.");
-            Console.Error.WriteLine("  Set ytdlp=<path> in conf/.mmuconfig, place yt-dlp.exe alongside mmu.exe,");
+            Console.Error.WriteLine("  Set ytdlp=<path> in conf/mmu/.conf, place yt-dlp.exe alongside mmu.exe,");
             Console.Error.WriteLine("  or add it to PATH.");
             return 1;
         }
@@ -48,7 +48,7 @@ class DownloadTool
         string ytDlpConf = Path.Combine(confDir, "yt-dlp.conf");
         if (!File.Exists(ytDlpConf))
         {
-            Console.Error.WriteLine("conf/yt-dlp.conf not found.");
+            Console.Error.WriteLine("conf/mmu/yt-dlp.conf not found.");
             return 1;
         }
 
