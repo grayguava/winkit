@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-class Remind
+class Window
 {
     static string LatestResultPath()
     {

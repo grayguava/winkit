@@ -24,7 +24,7 @@ class Program
         }
         try
         {
-            return MainBody(args);
+            return MainBody();
         }
         finally
         {
@@ -33,11 +33,8 @@ class Program
         }
     }
 
-    static int MainBody(string[] args)
+    static int MainBody()
     {
-        if (args.Length > 0 && (args[0] == "--remind" || args[0] == "/remind"))
-            return Remind.Show();
-
         string baseDir = BaseDir();
         string logsDir = Path.GetFullPath(Path.Combine(baseDir, "..", "logs"));
         string runDir = Path.Combine(logsDir, DateTime.Now.ToString("yyyy-MM-ddTHH-mm-ss"));
@@ -45,6 +42,7 @@ class Program
 
         var commands = CommandConfig.Load(Path.Combine(baseDir, ".cmds"));
         var smartAttrs = SmartAttrConfig.Load(Path.Combine(baseDir, ".smart"));
+        SettingsConfig.Load(Path.Combine(baseDir, ".warnc"));
 
         foreach (var cmd in commands)
         {
@@ -83,20 +81,23 @@ class Program
         }
         Console.WriteLine("  \u2713 No repairs");
 
-        if (changes.Count > 0)
+        bool hasImportantChange = changes.Exists(c => !c.Contains(" extra "));
+
+        if (hasImportantChange)
         {
             Console.WriteLine();
             Console.WriteLine("  Changes detected:");
             foreach (string c in changes)
                 Console.WriteLine("    " + c);
             Console.WriteLine();
-            Remind.Show(changes.Exists(c => !c.Contains(" extra ")));
+            Window.Show(true);
             return 1;
         }
 
         Console.WriteLine();
         Console.WriteLine("  No changes since last run.");
-        Remind.Show(false);
+        if (!SettingsConfig.WarnOnly)
+            Window.Show(false);
         return 0;
     }
 

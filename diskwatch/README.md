@@ -15,13 +15,7 @@ Read-only disk health monitor that runs system checks, compares results against 
 diskwatch
 ```
 
-Runs all checks, prints a verdict to the console (still visible if run from a terminal), and shows a dark-themed popup with aligned monospace layout.
-
-```
-diskwatch --remind
-```
-
-Shows the same popup from the last run without re-running checks. Useful for Task Scheduler reminders.
+Runs all checks, prints a verdict to the console (still visible if run from a terminal), and shows a dark-themed popup with aligned monospace layout. Intended to be driven by Task Scheduler; the popup is the core output.
 
 ### Exit codes
 
@@ -128,6 +122,21 @@ The Event Log reader is built-in (uses .NET EventLog API, not an external comman
 
 Names are human-readable (spaces allowed) and used as keys in result.json. Lines starting with `#` or `;` are comments. Blank lines are ignored.
 
+### .warnc
+
+`bin/.warnc` holds behavior flags for the scanner:
+
+```ini
+; warnOnly=true  -> run silently, popup only when something changed (warning)
+; warnOnly=false -> popup after every scan (default)
+
+warnOnly=false
+```
+
+| Key | Values | Description |
+|---|---|---|
+| `warnOnly` | `true` / `false` | When `true`, diskwatch runs silently and only shows the popup when something changed. When `false` (or config missing), it shows the popup after every scan. |
+
 ---
 
 ## State and change detection
@@ -227,7 +236,7 @@ Only the 5 most recent timestamped run directories are kept. Older runs are prun
 
 <img src="popup.png" alt="diskwatch popup" width="380"/>
   
-At the end of every normal run (and via `--remind`), a custom dark-themed dialog with Consolas monospace font shows the summary. Two tiers:
+At the end of every run, a custom dark-themed dialog with Consolas monospace font shows the summary (unless `.warnc` sets `warnOnly=true` and nothing important changed). Two tiers:
 
 | Condition | Icon | Title text |
 |---|---|---|
@@ -280,11 +289,12 @@ Compiles all source files in `src/` to `bin/diskwatch.exe` as a winexe (no conso
 ```
 diskwatch/
 ├── src/
-│   ├── program.cs           ← Main(), mutex, --remind, runs commands, Event Log reader
+│   ├── program.cs           ← Main(), mutex, runs commands, Event Log reader
 │   ├── commandrunner.cs     ← Process launcher (no timeout)
 │   ├── config/
 │   │   ├── commands.cs      ← Command struct + .cmds loading/validation
-│   │   └── smartattrs.cs    ← SmartAttrDef + .smart loading
+│   │   ├── smartattrs.cs    ← SmartAttrDef + .smart loading
+│   │   └── settings.cs      ← .warnc loading (warnOnly flag)
 │   ├── models/
 │   │   ├── state.cs         ← DriveState, SmartState, MasterState
 │   │   └── persistence.cs   ← MasterStateManager: load/save/diff, JSON mapping
@@ -294,12 +304,13 @@ diskwatch/
 │   │   ├── smartctl.cs      ← smartctl output parsing
 │   │   └── wininit.cs       ← wininit repair events parsing
 │   └── popup/
-│       ├── remind.cs        ← Remind dialog: main/extra views, aligned tables
+│       ├── window.cs        ← popup dialog: main/extra views, aligned tables
 │       └── scrollpanel.cs   ← CustomScrollPanel (custom slim scrollbar)
 ├── bin/
 │   ├── diskwatch.exe        ← compiled binary (build output)
 │   ├── .cmds                ← commands to run (edit this)
-│   └── .smart               ← SMART attr IDs and names (edit this)
+│   ├── .smart               ← SMART attr IDs and names (edit this)
+│   └── .warnc               ← behavior flags (warnOnly)
 ├── logs/                    ← auto-created, holds per-run dirs with result.json + runs/
 ├── build.bat
 └── README.md
