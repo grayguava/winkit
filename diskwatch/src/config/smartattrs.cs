@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 
 public class SmartAttrDef
 {
@@ -12,17 +11,17 @@ static class SmartAttrConfig
     public static List<SmartAttrDef> Load(string path)
     {
         var attrs = new List<SmartAttrDef>();
-        if (!File.Exists(path)) return attrs;
-        foreach (string rawLine in File.ReadAllLines(path))
+        foreach (string line in Conf.Lines(path))
         {
-            string line = rawLine.Trim();
-            if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";")) continue;
-            int eq = line.IndexOf('=');
-            string idStr = eq >= 0 ? line.Substring(0, eq).Trim() : line.Trim();
-            string name = eq >= 0 ? line.Substring(eq + 1).Trim() : idStr;
+            string key, value;
+            if (!Conf.KeyValue(line, out key, out value))
+            {
+                key = line;
+                value = line;
+            }
             int id;
-            if (int.TryParse(idStr, out id))
-                attrs.Add(new SmartAttrDef { Id = id, Name = name });
+            if (int.TryParse(key, out id))
+                attrs.Add(new SmartAttrDef { Id = id, Name = value });
         }
         return attrs;
     }

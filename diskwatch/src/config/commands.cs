@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Text.RegularExpressions;
 
 static class CommandConfig
@@ -14,12 +13,9 @@ static class CommandConfig
     public static List<Command> Load(string path)
     {
         var commands = new List<Command>();
-        if (!File.Exists(path)) return commands;
         string section = null;
-        foreach (string rawLine in File.ReadAllLines(path))
+        foreach (string line in Conf.Lines(path))
         {
-            string line = rawLine.Trim();
-            if (line.Length == 0 || line.StartsWith("#") || line.StartsWith(";")) continue;
             if (line.StartsWith("[") && line.EndsWith("]"))
             {
                 section = line.Substring(1, line.Length - 2);

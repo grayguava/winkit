@@ -299,6 +299,7 @@ diskwatch/
 │   │   ├── state.cs         ← DriveState, SmartState, MasterState
 │   │   └── persistence.cs   ← MasterStateManager: load/save/diff, JSON mapping
 │   ├── parsers/
+│   │   ├── conf.cs           ← shared config reader (lines, key=value, bool)
 │   │   ├── build.cs         ← MasterStateManager.Build (runs dir → MasterState)
 │   │   ├── chkdsk.cs        ← fsutil dirty + chkdsk output parsing
 │   │   ├── smartctl.cs      ← smartctl output parsing
