@@ -1,3 +1,5 @@
+# commands to run, grouped by section
+
 [fsutil]
 fsutil dirty query C:
 fsutil dirty query D:

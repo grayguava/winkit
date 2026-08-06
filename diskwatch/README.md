@@ -64,12 +64,6 @@ Runs smartctl with full output for each configured device. Parsed for:
 - **Percentage Used Endurance Indicator** — remaining endurance (NVMe).
 - **Watched attributes** — tracked by ID from config; stored by name.
 
-### Windows Event Log
-
-Scans up to 50 recent entries across three logs (Wininit/Operational, System, Application) for disk repair activity. Only flags:
-- Wininit-sourced events with InstanceId 262 or 264.
-- Any Warning event containing both "disk" and "repair" in the message.
-
 ---
 
 ## Configuration
@@ -79,6 +73,7 @@ Scans up to 50 recent entries across three logs (Wininit/Operational, System, Ap
 `bin/.cmds` lists every command to run, grouped by section. Each section is a command category; each line under it is a full command:
 
 ```ini
+# commands to run, grouped by section
 [fsutil]
 fsutil dirty query C:
 fsutil dirty query D:
@@ -96,15 +91,12 @@ The first word of each line is the executable, the rest are its arguments. Only 
 - `[chkdsk]` — read-only filesystem scan. Drive letter extracted from output.
 - `[smartctl]` — SMART data. Device keyed by section+index.
 
-The Event Log reader is built-in (uses .NET EventLog API, not an external command).
-
 ### .smart
 
 `bin/.smart` lists SMART attributes to track in `ID=Name` format. The first 5 are **important** (shown in the Critical Health section of the popup and trigger warnings on change). The rest are **extras** (informational, shown in the Extra view, no warning).
 
 ```ini
-# First 5 = important values shown in popup
-# Rest = informational only
+# SMART attrs to track (ID=Name). First 5 = important, rest = extras
 5=Reallocated Sectors
 197=Current Pending Sectors
 198=Offline Uncorrectable
@@ -127,9 +119,7 @@ Names are human-readable (spaces allowed) and used as keys in result.json. Lines
 `bin/.warnc` holds behavior flags for the scanner:
 
 ```ini
-; warnOnly=true  -> run silently, popup only when something changed (warning)
-; warnOnly=false -> popup after every scan (default)
-
+# warnOnly=true -> popup only when something changed, false -> popup every scan
 warnOnly=false
 ```
 
@@ -143,7 +133,7 @@ warnOnly=false
 
 ### result.json
 
-Pretty-printed JSON stored in `logs/<timestamp>/result.json` after every run. Contains parsed state for all drives, SMART devices, and the most recent repair timestamp. The previous run's `result.json` is loaded as the comparison baseline — no root-level `logs/result.json` duplicate. Loaded via `JavaScriptSerializer` for deserialization; written with a custom pretty-printer.
+Pretty-printed JSON stored in `logs/<timestamp>/result.json` after every run. Contains parsed state for all drives and SMART devices. The previous run's `result.json` is loaded as the comparison baseline — no root-level `logs/result.json` duplicate. Loaded via `JavaScriptSerializer` for deserialization; written with a custom pretty-printer.
 
 Structure:
 
@@ -178,8 +168,7 @@ Structure:
         "Total LBAs Read": 276902
       }
     }
-  },
-  "lastRepair": null
+  }
 }
 ```
 
@@ -195,7 +184,6 @@ On every run, the current state is compared against the previous state loaded fr
 - **SMART health** changed (PASSED / FAILED).
 - **SMART endurance** changed.
 - **Any important SMART attribute** changed.
-- **Repair event timestamp** changed.
 
 Extra SMART attribute changes are tracked but do NOT trigger a warning popup or exit code 1.
 
@@ -212,8 +200,7 @@ logs/
 │   └── runs/
 │       ├── fsutil_C.json
 │       ├── chkdsk_C.json
-│       ├── smartctl_sda.json
-│       └── wininit.json
+│       └── smartctl_sda.json
 └── 2026-07-10T09-15-00/
     └── ...
 ```
@@ -302,8 +289,7 @@ diskwatch/
 │   │   ├── conf.cs           ← shared config reader (lines, key=value, bool)
 │   │   ├── build.cs         ← MasterStateManager.Build (runs dir → MasterState)
 │   │   ├── chkdsk.cs        ← fsutil dirty + chkdsk output parsing
-│   │   ├── smartctl.cs      ← smartctl output parsing
-│   │   └── wininit.cs       ← wininit repair events parsing
+│   │   └── smartctl.cs      ← smartctl output parsing
 │   └── popup/
 │       ├── window.cs        ← popup dialog: main/extra views, aligned tables
 │       └── scrollpanel.cs   ← CustomScrollPanel (custom slim scrollbar)
@@ -363,8 +349,7 @@ The monospace dialog with Consolas font enables aligned tables (Critical Health,
 ## Known limitations
 
 - **Admin required** — run as Administrator. Without elevation, fsutil reports "Access Denied", chkdsk cannot scan, and smartctl may show limited data.
-- **Windows-only** — uses fsutil, chkdsk, and Windows Event Log.
+- **Windows-only** — uses fsutil, chkdsk, and smartctl.
 - **smartctl optional but manual** — must be installed and configured in .cmds if you want SMART checks. Not bundled. Download the Windows package from [smartmontools](https://www.smartmontools.org/wiki/Download#InstalltheWindowspackage).
 - **No drive discovery** — configure every drive in .cmds and SMART attrs in .smart.
 - **No daemon mode** — use Task Scheduler for periodic runs.
-- **Event log filtering is heuristic** — the wininit/repair event detection is based on keyword matching and may miss or falsely flag events depending on Windows version and language.

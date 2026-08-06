@@ -10,8 +10,7 @@ public static partial class MasterStateManager
         {
             Timestamp = DateTime.Now.ToString("o"),
             Drives = new Dictionary<string, DriveState>(),
-            Smart = new Dictionary<string, SmartState>(),
-            LastRepair = null
+            Smart = new Dictionary<string, SmartState>()
         };
 
         if (Directory.Exists(runDir))
@@ -35,10 +34,6 @@ public static partial class MasterStateManager
                 {
                     string label = name.Substring(name.IndexOf('_') + 1);
                     state.Smart[label] = ParseSmart(result.Output, smartAttrs);
-                }
-                else if (name == "wininit")
-                {
-                    state.LastRepair = ParseWininit(result.Output);
                 }
             }
         }

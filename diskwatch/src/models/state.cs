@@ -23,5 +23,4 @@ public class MasterState
     public string Timestamp;
     public Dictionary<string, DriveState> Drives;
     public Dictionary<string, SmartState> Smart;
-    public string LastRepair;
 }

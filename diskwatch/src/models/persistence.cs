@@ -85,9 +85,6 @@ public static partial class MasterStateManager
             }
         }
 
-        if (prev.LastRepair != curr.LastRepair)
-            changes.Add("repair events changed");
-
         return changes;
     }
 
@@ -127,8 +124,7 @@ public static partial class MasterStateManager
         var s = new MasterState();
         if (d == null) return s;
         s.Timestamp = d.ContainsKey("timestamp") ? (string)d["timestamp"] : null;
-        if (d.ContainsKey("drives"))
-        {
+        if (d.ContainsKey("drives"))        {
             var dd = d["drives"] as Dictionary<string, object>;
             if (dd != null)
             {
@@ -147,7 +143,6 @@ public static partial class MasterStateManager
                     s.Smart[kv.Key] = MapSmart(kv.Value as Dictionary<string, object>);
             }
         }
-        s.LastRepair = d.ContainsKey("lastRepair") ? (string)d["lastRepair"] : null;
         return s;
     }
 
@@ -257,8 +252,7 @@ public static partial class MasterStateManager
                 sb.Append("    }");
             }
         }
-        sb.Append("\r\n  },\r\n");
-        Field(sb, "lastRepair", s.LastRepair, 1); sb.Append("\r\n");
+        sb.Append("\r\n  }\r\n");
         sb.Append("}\r\n");
         return sb.ToString();
     }

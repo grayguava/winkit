@@ -1,7 +1,4 @@
-# SMART attributes to track: ID=Name
-# First 5 = important values shown in popup
-# Rest = informational only
-# Ordered by importance
+# SMART attrs to track (ID=Name). First 5 = important, rest = extras
 
 5=Reallocated Sectors
 197=Current Pending Sectors

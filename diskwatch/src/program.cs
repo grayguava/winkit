@@ -51,9 +51,6 @@ class Program
             SaveRaw(runsDir, cmd.Name, code, output);
         }
 
-        string evtLog = ReadWininitLog();
-        SaveRaw(runsDir, "wininit", 0, evtLog ?? "");
-
         var prev = LoadPrevState(logsDir, runDir);
         var curr = MasterStateManager.Build(runsDir, smartAttrs);
         MasterStateManager.Save(Path.Combine(runDir, "result.json"), curr);
@@ -79,10 +76,8 @@ class Program
             Console.WriteLine("  \u2713 " + kv.Key + "  " + kv.Value.Health
                 + (kv.Value.Endurance >= 0 ? "  endurance " + kv.Value.Endurance + "%" : ""));
         }
-        Console.WriteLine("  \u2713 No repairs");
 
         bool hasImportantChange = changes.Exists(c => !c.Contains(" extra "));
-
         if (hasImportantChange)
         {
             Console.WriteLine();
@@ -107,49 +102,6 @@ class Program
         string path = Path.Combine(dir, name + ".json");
         File.WriteAllText(path,
             "{\"ExitCode\":" + exitCode + ",\"Output\":" + MasterStateManager.EncodeJson(output ?? "") + "}");
-    }
-
-    static string ReadWininitLog()
-    {
-        string[] logNames = {
-            "Microsoft-Windows-Wininit/Operational",
-            "System", "Application"
-        };
-        foreach (string logName in logNames)
-        {
-            try
-            {
-                using (var log = new System.Diagnostics.EventLog(logName))
-                {
-                    var sb = new System.Text.StringBuilder();
-                    int count = Math.Min(log.Entries.Count, 50);
-                    for (int i = log.Entries.Count - 1; i >= log.Entries.Count - count && i >= 0; i--)
-                    {
-                        var entry = log.Entries[i];
-                        bool isRepair = (entry.Source != null
-                            && entry.Source.IndexOf("wininit", StringComparison.OrdinalIgnoreCase) >= 0
-                            && (entry.InstanceId == 262 || entry.InstanceId == 264
-                                || (entry.Message != null
-                                    && entry.Message.IndexOf("repair", StringComparison.OrdinalIgnoreCase) >= 0)))
-                            || (entry.EntryType == System.Diagnostics.EventLogEntryType.Warning
-                                && entry.Message != null
-                                && entry.Message.IndexOf("disk", StringComparison.OrdinalIgnoreCase) >= 0
-                                && entry.Message.IndexOf("repair", StringComparison.OrdinalIgnoreCase) >= 0);
-                        if (isRepair)
-                            sb.AppendLine(entry.TimeGenerated.ToString("yyyy-MM-dd HH:mm")
-                                + "  " + entry.Source + "  "
-                                + (entry.Message ?? "").Replace("\r\n", " ").Replace("\n", " "));
-                    }
-                    if (sb.Length > 0)
-                    {
-                        sb.Insert(0, "Source log: " + logName + "\n");
-                        return sb.ToString().TrimEnd();
-                    }
-                }
-            }
-            catch { continue; }
-        }
-        return "";
     }
 
     static MasterState LoadPrevState(string logsDir, string currentDir)

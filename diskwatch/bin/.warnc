@@ -1,1 +1,2 @@
+# warnOnly=true -> popup only when something changed, false -> popup every scan
 warnOnly=false
