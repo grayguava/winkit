@@ -1,22 +1,20 @@
 using System;
-using System.IO;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Reflection;
+using System.IO;
 using System.Text;
 
-class Program {
-    [DllImport("user32.dll", CharSet=CharSet.Auto)]
-    static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+static class Daemon {
+    public static string exeDir;
+    public static string stateFile;
+    public static string assetsDir;
 
-    static string exeDir;
-    static string stateFile;
+    public static void Init(string dir) {
+        exeDir = dir;
+        stateFile = Path.Combine(dir, "state");
+        assetsDir = Path.Combine(dir, "assets");
+    }
 
-    [STAThread]
-    static void Main() {
-        exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        stateFile = Path.Combine(exeDir, "state");
-
+    public static void Advance() {
         var state = LoadState();
 
         while (state.Queue.Count > 0) {
@@ -32,33 +30,29 @@ class Program {
             state.Queue.RemoveAt(0);
         }
 
-        // Queue exhausted: full scan + rebuild
-        {
-            string assetsDir = ResolveAssetsDir();
-            if (!Directory.Exists(assetsDir)) return;
+        if (!Directory.Exists(assetsDir)) return;
 
-            string[] exts = { "*.jpg", "*.jpeg", "*.png", "*.bmp" };
-            var allImages = new List<string>();
-            foreach (var ext in exts)
-                allImages.AddRange(Directory.GetFiles(assetsDir, ext, SearchOption.TopDirectoryOnly));
-            if (allImages.Count == 0) return;
+        string[] exts = { "*.jpg", "*.jpeg", "*.png", "*.bmp" };
+        var allImages = new List<string>();
+        foreach (var ext in exts)
+            allImages.AddRange(Directory.GetFiles(assetsDir, ext, SearchOption.TopDirectoryOnly));
+        if (allImages.Count == 0) return;
 
-            for (int i = 0; i < allImages.Count; i++)
-                allImages[i] = MakeRelative(allImages[i]);
+        for (int i = 0; i < allImages.Count; i++)
+            allImages[i] = MakeRelative(allImages[i]);
 
-            Shuffle(allImages);
-            state.Queue = allImages;
-            state.Shown = new List<string>();
+        Shuffle(allImages);
+        state.Queue = allImages;
+        state.Shown = new List<string>();
 
-            string c = state.Queue[0];
-            state.Queue.RemoveAt(0);
-            state.Shown.Add(c);
-            SaveState(state);
+        string c = state.Queue[0];
+        state.Queue.RemoveAt(0);
+        state.Shown.Add(c);
+        SaveState(state);
 
-            string fp = Path.Combine(exeDir, c);
-            if (!File.Exists(fp)) return;
+        string fp = Path.Combine(exeDir, c);
+        if (File.Exists(fp))
             ApplyWallpaper(fp);
-        }
     }
 
     static void ApplyWallpaper(string fullPath) {
@@ -70,23 +64,8 @@ class Program {
         SystemParametersInfo(20, 0, fullPath, 3);
     }
 
-    static string ResolveAssetsDir() {
-        string path = Path.Combine(exeDir, ".conf");
-        if (!File.Exists(path)) return Path.Combine(exeDir, "assets");
-        try {
-            foreach (string raw in File.ReadAllLines(path)) {
-                string line = raw.Trim();
-                if (line.Length == 0 || line.StartsWith("#")) continue;
-                int eq = line.IndexOf('=');
-                if (eq <= 0) continue;
-                string key = line.Substring(0, eq).Trim();
-                string val = line.Substring(eq + 1).Trim();
-                if (string.Equals(key, "AssetsDir", StringComparison.OrdinalIgnoreCase))
-                    return Path.IsPathRooted(val) ? val : Path.Combine(exeDir, val);
-            }
-        } catch { }
-        return Path.Combine(exeDir, "assets");
-    }
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+    static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 
     static void Shuffle(List<string> list) {
         var rng = new Random(Guid.NewGuid().GetHashCode());

@@ -1,24 +1,33 @@
 # wallswitch — wallpaper randomizer
 
 - **Tool:** `wallswitch/bin/wallswitch.exe`
-- **Source:** `wallswitch/src/wallswitch.cs`
-- **Language:** C#, compiled via `csc.exe /target:exe`
-- **Role:** On-demand wallpaper randomizer. Picks a random image from `assets/`, applies it as the desktop wallpaper via `SystemParametersInfo`, and persists the selection across reboots via the registry. Tracks a shuffle queue in `state` so images are cycled without repeats until the queue is exhausted.
+- **Source:** `wallswitch/src/` (program.cs, daemon.cs, hotkey.cs)
+- **Language:** C#, compiled via `csc.exe` (`/target:winexe`, WinForms)
+- **Role:** Background daemon. Registers a global hotkey and stays resident; on each press it picks the next image from `assets/`, applies it as the desktop wallpaper via `SystemParametersInfo`, and persists the selection across reboots via the registry. Tracks a shuffle queue in `state` so images are cycled without repeats until the queue is exhausted.
 
 ---
 
 ## Usage
 
-Run `bin/wallswitch.exe` directly — double-click in Explorer, invoke from a command prompt, or bind to a hotkey via HotKeyKiller / AutoHotkey.
+Start it once — launch `bin/wallswitch.exe` (double-click, on login via Task
+Scheduler/Startup folder, etc.). It runs in the background, registers the
+configured hotkey, and does nothing else until you press it:
 
-The tool:
-1. Scans `assets/` for images.
-2. Loads `bin/state` for the current shuffle queue.
-3. Syncs state with current file listing (detects added/removed images).
-4. Pops the front of the queue, sets it as wallpaper, appends it to the shown list.
-5. Saves state back to `bin/state`.
+| Action | Result |
+|---|---|
+| Launch | Registers the `Hotkey` from `.conf`, sits in the background |
+| Press hotkey | Instantly applies the next wallpaper |
+| Second launch | Detects the running daemon (mutex) and exits |
 
-There is no UI and no output. The tool is silent on success — failure is also silent (returns without action if `assets/` is missing or empty). Configuration is via `bin/.conf` (`AssetsDir` key, default `assets`).
+The built-in hotkey listener replaces any third‑party hotkey tool, so switching
+is instant — no command‑chain hop.
+
+Per hotkey press, the tool:
+1. Loads `bin/state` for the current shuffle queue.
+2. Pops the front of the queue, sets it as wallpaper, appends it to the shown list.
+3. Saves state back to `bin/state`. If the queue is empty, it reshuffles and rebuilds.
+
+There is no UI and no output. Configuration is via `bin/.conf` (`AssetsDir` and `Hotkey` keys).
 
 ---
 
@@ -35,7 +44,7 @@ There is no UI and no output. The tool is silent on success — failure is also 
 build.bat
 ```
 
-Compiles `src/wallswitch.cs` → `bin/wallswitch.exe`. The tool uses `/target:exe` (console mode), though it produces no console output — the window appears briefly and exits.
+Compiles `src/program.cs`, `src/daemon.cs`, and `src/hotkey.cs` → `bin/wallswitch.exe`. The tool is `/target:winexe` (no console window) and references `System.Windows.Forms.dll` for the hidden window that receives hotkey messages.
 
 The build script uses the system compiler. No Visual Studio, no `dotnet` CLI, no NuGet, no install step. This is the same toolchain used by `kdbx-backup` tools.
 
@@ -44,10 +53,12 @@ The build script uses the system compiler. No Visual Studio, no `dotnet` CLI, no
 ```
 wallswitch/
 ├── src/
-│   └── wallswitch.cs     ← source (edit this)
+│   ├── program.cs         ← entry: mutex, config, daemon startup
+│   ├── daemon.cs          ← wallpaper queue + apply logic
+│   └── hotkey.cs          ← global hotkey registration + parse
 ├── bin/
 │   ├── wallswitch.exe    ← compiled binary (build output)
-│   ├── .conf             ← configuration (AssetsDir)
+│   ├── .conf             ← configuration (AssetsDir, Hotkey)
 │   └── state             ← shuffle queue / shown list (auto-managed)
 ├── build.bat
 └── assets/               ← your image collection
@@ -59,14 +70,21 @@ wallswitch/
 
 ### Startup sequence
 
-1. `Assembly.GetExecutingAssembly().Location` resolves the `.exe` directory.
-2. `assets/` directory scanned for `*.jpg`, `*.jpeg`, `*.png`, `*.bmp`.
-3. `bin/state` loaded containing two lists: `queue` and `shown`.
-4. Image sync — compares current files against known set.
-5. If queue is empty, reshuffle all images.
-6. Pop first image from queue, append to shown.
-7. Save state.
-8. Apply wallpaper (registry + SystemParametersInfo).
+1. A named mutex ensures only one daemon runs; a second launch exits.
+2. `Assembly.GetExecutingAssembly().Location` resolves the `.exe` directory.
+3. `bin/.conf` is read for `AssetsDir` and `Hotkey`.
+4. A hidden WinForms window (`HotkeyForm`) registers the global hotkey via `RegisterHotKey`.
+5. The daemon enters the message loop and idles until the hotkey is pressed.
+6. On `WM_HOTKEY`, it picks the next image and applies it.
+
+### Hotkey listener
+
+The hidden `HotkeyForm` overrides `WndProc` to catch `WM_HOTKEY` (0x0312). On
+each hotkey press it calls `Advance()`, which runs the shuffle‑queue logic and
+applies the wallpaper. The hotkey combo is parsed from the `Hotkey=` config
+value (e.g. `Ctrl+Alt+W`); modifiers are `Ctrl`/`Alt`/`Shift`/`Win` and the key
+is a letter, digit, `space`, or `F1`–`F24`. If the combo is already in use by
+another app, `RegisterHotKey` fails and a warning dialog is shown.
 
 ### Shuffle queue
 
@@ -137,16 +155,21 @@ Delete `bin/state` to reset the cycle. The tool recreates it with a fresh shuffl
 
 ---
 
-## Mapping hotkeys
+## Hotkey
 
-`wallswitch.exe` is designed to be bound to a key combination for instant wallpaper switching. Since it has no UI and produces no output, it works with any hotkey tool:
+The listener is built in — no external hotkey tool is needed.
 
-- **AutoHotkey** — `` #^!w::Run "wallswitch\bin\wallswitch.exe" ``
-- **HotKeyKiller / HotKeyP** — create a new entry pointing to the `.exe`, pick your key combination.
-- **PowerToys** — Keyboard Manager → remap a shortcut to launch the `.exe`.
-- **Task Scheduler** — trigger at logon for an automatic wallpaper on startup.
+- **Config:** `Hotkey=Ctrl+Alt+W` in `bin/.conf`
+- **Modifiers:** `Ctrl`, `Control`, `Alt`, `Shift`, `Win` (aliases: `Super`, `Meta`, `Cmd`), joined with `+`
+- **Key:** a single letter, digit, `space`, or `F1`–`F24`
+- **Requirement:** at least one modifier (a bare key is not accepted; Windows won't register it)
+- **Registration:** `RegisterHotKey` on a hidden window; fired via `WM_HOTKEY`
+- **Single instance:** a named mutex stops a second daemon from starting
 
-The hotkey itself is up to you — `wallswitch.exe` just picks the next image from the shuffle queue and exits.
+To auto-start at logon, drop a shortcut to `wallswitch.exe` in the Startup
+folder or create a Task Scheduler "at logon" task. To change the wallpaper
+without the hotkey, delete `bin/state` to recreate the cycle, or reconfigure
+`Hotkey=`.
 
 ---
 
@@ -157,8 +180,9 @@ Settings are read from `bin/.conf`. Keys are case-insensitive; lines starting wi
 | Key | Required | Default | Description |
 |---|---|---|---|
 | `AssetsDir` | no | `assets` | Image directory. Relative paths resolve against the `.exe` folder. |
+| `Hotkey` | yes | — | Global hotkey combo that switches the wallpaper (e.g. `Ctrl+Alt+W`). |
 
-All other settings are determined by the file structure or hardcoded in `wallswitch.cs`:
+All other settings are determined by the file structure or hardcoded in the source:
 
 | Setting | How to change | Default |
 |---|---|---|
@@ -180,7 +204,7 @@ To change wallpaper style from Fill to Fit, Center, Stretch, or Tile:
 | Tile | 0 | 1 |
 | Span (multi-monitor) | 22 | 0 |
 
-Edit the values in `src/wallswitch.cs` and recompile with `build.bat`.
+Edit the values in the source (`daemon.cs` for wallpaper style/tiling) and recompile with `build.bat`.
 
 ---
 
@@ -193,8 +217,8 @@ Edit the values in `src/wallswitch.cs` and recompile with `build.bat`.
 | Image formats | JPEG, PNG, BMP (native Windows support); WebP with extension |
 | Multi-monitor | Single wallpaper spans all monitors (Fill/Span style) |
 | .NET version | Compiled against .NET Framework 4.0 (csc.exe v4.0.30319) |
-| Dependencies | None beyond Windows built-ins |
-| Hotkey launcher | Tested with HotKeyKiller 7.x |
+| Dependencies | `System.Windows.Forms` (ships with .NET Framework) |
+| Hotkey | Built-in `RegisterHotKey` — no third‑party tool |
 
 ### Windows version notes
 
@@ -233,7 +257,7 @@ Together they cover both scenarios: immediate visual change + persistence withou
 
 ### Why silent operation
 
-The tool is meant to be triggered by a hotkey — you press a key, the wallpaper changes, you continue working. Console output or message boxes would defeat the purpose. Failure cases (missing assets, empty folder) are silently ignored because there is no user-facing UI to report them to.
+The tool is meant to be triggered by a hotkey — you press a key, the wallpaper changes, you continue working. Console output or message boxes would defeat the purpose. Failure cases (missing assets, empty folder, unregistered hotkey) are ignored or surfaced as a single startup dialog.
 
 ---
 
@@ -258,5 +282,6 @@ The old nature/tech split was replaced by a single tool because the distinction 
 - **Single-monitor only** — `SystemParametersInfo` sets the wallpaper for the entire virtual desktop. On multi-monitor setups, the image spans all monitors with the chosen style. For per-monitor wallpapers, use `IMultiMonitorDocking` API or a different tool.
 - **No image format conversion** — Windows must natively support the file format. `jpg`, `jpeg`, `png`, and `bmp` all work. `webp` requires the [WebP Codec for Windows](https://www.microsoft.com/store/productId/9PG2DK2V6M7P).
 - **No exclusion paths** — all images in `assets/` are included. There is no way to exclude individual files without removing them from the folder.
-- **No scheduling** — the tool is event-driven (hotkey), not time-driven. For automatic periodic rotation, use Task Scheduler or a separate daemon.
+- **Manual auto-start** — the daemon must be started at logon yourself (Startup shortcut or Task Scheduler). It does not install a startup entry.
+- **One hotkey, one action** — a single global hotkey per instance. To add more (e.g. next/previous), recompile or run another instance with a different `.conf` directory.
 - **State file can get stale** — if `assets/` is modified on a system without `.exe` write access (e.g. read-only mount), `state` cannot be updated and the cycle may repeat or skip.
