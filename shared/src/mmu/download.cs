@@ -22,7 +22,8 @@ class DownloadTool
             return 1;
         }
 
-        Console.Write("Paste link: ");
+        Console.WriteLine();
+        Console.Write(" Paste link: ");
         string url = Console.ReadLine();
         if (string.IsNullOrEmpty(url))
         {
@@ -30,8 +31,13 @@ class DownloadTool
             return 1;
         }
 
-        Console.Write("Filename (Enter to use the title): ");
-        string name = Console.ReadLine();
+        string title;
+        string artist;
+        FetchInfo(ytDlpExe, url, out title, out artist);
+        if (string.IsNullOrEmpty(title) || title.Equals("NA", StringComparison.OrdinalIgnoreCase))
+            title = "Unknown Title";
+        if (string.IsNullOrEmpty(artist) || artist.Equals("NA", StringComparison.OrdinalIgnoreCase))
+            artist = "Unknown Artist";
 
         string outputDir = Directory.GetCurrentDirectory();
         if (File.Exists(dotConfig))
@@ -41,9 +47,7 @@ class DownloadTool
         }
         Directory.CreateDirectory(outputDir);
 
-        string outputTemplate = string.IsNullOrEmpty(name)
-            ? "%(title)s.%(ext)s"
-            : Mmu.SanitizeName(name) + ".%(ext)s";
+        string outputTemplate = "%(title)s.%(ext)s";
 
         string ytDlpConf = Path.Combine(confDir, "yt-dlp.conf");
         if (!File.Exists(ytDlpConf))
@@ -63,7 +67,8 @@ class DownloadTool
             + "-o \"" + outputPath + "\" "
             + "\"" + url + "\"";
 
-        Console.WriteLine("Downloading...");
+        Console.WriteLine();
+        Console.WriteLine(" Downloading " + title + " by " + artist + "...");
 
         var psi = new ProcessStartInfo(ytDlpExe, procArgs)
         {
@@ -87,7 +92,7 @@ class DownloadTool
                 if (process.ExitCode == 0)
                 {
                     Console.WriteLine();
-                    Console.WriteLine("✨ Done. Saved to \"" + outputDir + "\"");
+                    Console.WriteLine("\u2728 Done. Saved audio to - " + outputDir + "\\");
                     return 0;
                 }
                 else
@@ -103,5 +108,35 @@ class DownloadTool
             Console.Error.WriteLine("Error: " + ex.Message);
             return 1;
         }
+    }
+
+    static void FetchInfo(string ytDlpExe, string url, out string title, out string artist)
+    {
+        title = null;
+        artist = null;
+        try
+        {
+            var psi = new ProcessStartInfo(ytDlpExe, "--no-playlist --print \"%(title)s\" --print \"%(artist)s\" \"" + url + "\"")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8
+            };
+            using (var p = new Process { StartInfo = psi })
+            {
+                p.Start();
+                string output = p.StandardOutput.ReadToEnd();
+                p.WaitForExit();
+                if (p.ExitCode == 0)
+                {
+                    string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (lines.Length > 0) title = lines[0].Trim();
+                    if (lines.Length > 1) artist = lines[1].Trim();
+                }
+            }
+        }
+        catch { }
     }
 }

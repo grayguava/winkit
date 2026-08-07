@@ -6,6 +6,8 @@ class Mmu
 {
     static int Main(string[] args)
     {
+        Console.OutputEncoding = System.Text.Encoding.UTF8;
+
         if (args.Length == 0)
         {
             Console.Error.WriteLine("Usage: mmu -d");
@@ -25,21 +27,6 @@ class Mmu
     public static string ExeDir()
     {
         return Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-    }
-
-    public static string SanitizeName(string name)
-    {
-        char[] invalid = Path.GetInvalidFileNameChars();
-        var sb = new System.Text.StringBuilder();
-        foreach (char c in name)
-        {
-            if (Array.IndexOf(invalid, c) >= 0)
-                sb.Append('_');
-            else
-                sb.Append(c);
-        }
-        string result = sb.ToString().Trim();
-        return result.Length == 0 ? "audio" : result;
     }
 
     public static string ReadConfValue(string path, string key)

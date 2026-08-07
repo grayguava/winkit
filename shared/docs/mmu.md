@@ -11,18 +11,19 @@ mmu -d
 Starts an interactive download session:
 
 - **Paste link** — YouTube or YouTube Music link
-- **Filename (optional)** — output name without extension (mmu appends the
-  correct extension). Press Enter to use the video title.
+- Filename defaults to the video title (no prompt). No artist is shown as
+  "Unknown Artist".
 
 ### Examples
 
 ```
 C:\> mmu -d
-Paste link: https://youtu.be/dQw4w9WgXcQ
-Filename (Enter to use the title): Rick Astley - Never Gonna Give You Up
-Downloading...
 
-✨ Done. Saved to "D:\Music"
+ Paste link: https://youtu.be/dQw4w9WgXcQ
+
+ Downloading Rick Astley - Never Gonna Give You Up by Rick Astley...
+
+✨ Done. Saved audio to - D:\Music\
 ```
 
 ### Requirements
@@ -73,16 +74,17 @@ Edit freely — no recompilation needed.
 2. Resolves `conf/mmu/yt-dlp.conf` relative to the .exe location.
 3. Locates `yt-dlp.exe` — explicit path from `.conf`, alongside binary, or via PATH.
 4. Locates `ffmpeg.exe` (alongside binary or in `ffmpeg/bin/`).
-5. Sanitizes the filename if one was given (removes invalid Windows filename characters).
+5. Fetches title and artist up front (`--print`), prints `Downloading <title> by <artist>...`.
 6. Runs yt-dlp with `--config-location` pointing at `conf/mmu/yt-dlp.conf`.
-7. On success, prints `✨ Done. Saved to "<dir>"`.
+7. Filename uses yt-dlp's `%(title)s` template; Windows-safe filenames come from the config.
+8. On success, prints `✨ Done. Saved audio to - <outdir>\`.
 
 ## Design decisions
 
 - **No transcoding:** `--audio-format best` keeps the original codec (Opus or AAC). No quality loss from re-encoding.
 - **Config over flags:** Both yt-dlp and mmu use config files instead of long argument strings. Easy to tweak without recompilation.
 - **Self-contained:** The wrapper locates everything relative to its own directory when using alongside-binary placement. Alternatively, use PATH with `ytdlp=default`.
-- **Clean output:** yt-dlp's verbose progress is suppressed. mmu prints a single `✨ Done. Saved to "<dir>"` line.
+- **Clean output:** yt-dlp's verbose progress is suppressed. mmu shows `Downloading <title> by <artist>...`, then a single `✨ Done. Saved audio to - <outdir>\` line.
 - **Extensible:** `mmu -d` is one dispatch branch; future subcommands (`-c` for cutting) add new branches without changing the download behavior.
 
 ## Known limitations
