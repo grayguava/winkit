@@ -1,8 +1,12 @@
-# mmu — my music util
+## Download audio
 
-Single-binary music utility. Today it downloads audio from YouTube/YT Music;
-future commands (e.g. cutting ads out of local files) will reuse the same
-binary and config.
+- **Source:** `src/mmu/mmu.cs` (main + helpers), `src/mmu/download.cs` (download flow)
+- **Dependencies:** external `yt-dlp` (required), external `ffmpeg` (recommended for extraction)
+- **Description:** Downloads audio from YouTube/YT Music. Interactive, single-binary wrapper around yt-dlp with a quiet, clean progress report.
+
+---
+
+### Usage
 
 ```
 mmu -d
@@ -10,11 +14,12 @@ mmu -d
 
 Starts an interactive download session:
 
-- **Paste link** — YouTube or YouTube Music link
-- Filename defaults to the video title (no prompt). No artist is shown as
-  "Unknown Artist".
+1. Paste a YouTube or YouTube Music link.
+2. mmu fetches the title and artist up front and prints `Downloading <title> by <artist>...` (missing artist is shown as "Unknown Artist").
+3. Filename defaults to yt-dlp's `%(title)s` template - no manual filename prompt.
+4. On success, prints `✨ Done. Saved audio to - <outdir>\`.
 
-### Examples
+#### Example
 
 ```
 C:\> mmu -d
@@ -26,22 +31,27 @@ C:\> mmu -d
 ✨ Done. Saved audio to - D:\Music\
 ```
 
-### Requirements
+---
 
-- `yt-dlp.exe` — on PATH, placed alongside mmu.exe, or specified in `.conf`
-- `ffmpeg.exe` — alongside mmu.exe or in `ffmpeg/bin/` (optional but recommended)
+### How it works
 
-## Configuration
+#### Dependency resolution
 
-### .conf
+Locates `yt-dlp.exe` via `conf/mmu/.conf` (explicit path), alongside the binary, or PATH. Locates `ffmpeg.exe` alongside the binary or in `ffmpeg/bin/`. Both accept `default` for auto-detection.
 
-**Location:** `conf/mmu/.conf`
+#### Pre-flight fetch
 
-```ini
-; ytdlp:  "default" for PATH detection, or full path to yt-dlp.exe
-; ffmpeg: "default" for PATH detection, or full path to ffmpeg/ffprobe
-; outdir: download directory
+Runs `yt-dlp --print "%(title)s" --print "%(artist)s"` on the link to get the display name for the progress line.
 
+#### Download
+
+Runs yt-dlp with `--config-location` pointing at `conf/mmu/yt-dlp.conf` so no other yt-dlp config applies. Filename uses `%(title)s.%(ext)s`; Windows-safe names come from the config's flags. Verbose output is suppressed - the config sets quiet output so mmu prints its own progress/success lines.
+
+#### Configuration
+
+`conf/mmu/.conf`:
+
+```
 ytdlp=default
 ffmpeg=default
 outdir=D:\Music
@@ -49,46 +59,53 @@ outdir=D:\Music
 
 | Key | Values | Description |
 |---|---|---|
-| `ytdlp` | `default` or full path | How to locate yt-dlp.exe. `default` checks alongside binary, then PATH. |
-| `ffmpeg` | `default` or full path | How to locate ffmpeg.exe/ffprobe.exe. `default` checks alongside binary, then PATH. Accepts path to exe or directory. |
-| `outdir` | directory path | Where downloaded files are saved. Defaults to current directory. |
+| `ytdlp` | `default` or full path | How to locate yt-dlp.exe. `default` tries alongside binary, then PATH. |
+| `ffmpeg` | `default` or full path | How to locate ffmpeg/ffprobe. `default` tries alongside binary, then PATH. Accepts an exe or a directory. |
+| `outdir` | directory path | Where downloads are saved. Defaults to current directory. |
 
-### yt-dlp.conf
+`conf/mmu/yt-dlp.conf` holds download flags, passed via `--config-location` so yt-dlp ignores all other config files. Good defaults: best audio only (`-f ba`), extract audio keeping original codec (`-x --audio-format best`), no playlists, Windows-safe filenames, quiet output. Both files are plain text - edit freely, no recompilation.
 
-**Location:** `conf/mmu/yt-dlp.conf`
+---
 
-Passed via `--config-location` so yt-dlp ignores all other config files. Contains sensible defaults:
-
-- Best audio only (`-f ba`)
-- Extract audio, keep original codec (`-x --audio-format best`)
-- Embed metadata and thumbnail
-- No playlists
-- Windows-safe filenames
-- Quiet output (mmu prints its own success message)
-
-Edit freely — no recompilation needed.
-
-## How it works
-
-1. Reads `conf/mmu/.conf` for yt-dlp path and output directory.
-2. Resolves `conf/mmu/yt-dlp.conf` relative to the .exe location.
-3. Locates `yt-dlp.exe` — explicit path from `.conf`, alongside binary, or via PATH.
-4. Locates `ffmpeg.exe` (alongside binary or in `ffmpeg/bin/`).
-5. Fetches title and artist up front (`--print`), prints `Downloading <title> by <artist>...`.
-6. Runs yt-dlp with `--config-location` pointing at `conf/mmu/yt-dlp.conf`.
-7. Filename uses yt-dlp's `%(title)s` template; Windows-safe filenames come from the config.
-8. On success, prints `✨ Done. Saved audio to - <outdir>\`.
-
-## Design decisions
+### Design decisions
 
 - **No transcoding:** `--audio-format best` keeps the original codec (Opus or AAC). No quality loss from re-encoding.
-- **Config over flags:** Both yt-dlp and mmu use config files instead of long argument strings. Easy to tweak without recompilation.
-- **Self-contained:** The wrapper locates everything relative to its own directory when using alongside-binary placement. Alternatively, use PATH with `ytdlp=default`.
-- **Clean output:** yt-dlp's verbose progress is suppressed. mmu shows `Downloading <title> by <artist>...`, then a single `✨ Done. Saved audio to - <outdir>\` line.
-- **Extensible:** `mmu -d` is one dispatch branch; future subcommands (`-c` for cutting) add new branches without changing the download behavior.
+- **Config over flags:** both yt-dlp and mmu use config files instead of hardcoded arguments. Tweakable without recompilation.
+- **Self-contained wrapper:** everything is located relative to the binary, or on PATH via `default`.
+- **Clean output:** yt-dlp's verbose progress is suppressed. One title line, one confirmation line.
+- **Extensible:** `mmu -d` is one dispatch branch; future subcommands reuse the same binary and config.
 
-## Known limitations
+---
 
-- Requires yt-dlp.exe (not bundled — user must download separately).
+### References
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - the download engine mmu wraps
+- [ffmpeg](https://ffmpeg.org/) - used for audio extraction/codecs
+
+---
+
+### Source tree
+
+```
+shared/
+├── src/
+│   └── mmu/
+│       ├── mmu.cs           ← main entry + shared helpers
+│       └── download.cs      ← interactive download flow
+├── bin/
+│   └── mmu.exe             ← compiled binary
+├── conf/
+│   └── mmu/
+│       ├── .conf           ← yt-dlp/ffmpeg paths + download dir
+│       └── yt-dlp.conf     ← download flags
+└── docs/
+    └── mmu.md
+```
+
+---
+
+### Known limitations
+
+- Requires yt-dlp.exe (not bundled - download separately).
 - Requires ffmpeg.exe for audio extraction (not bundled).
 - Single-file downloads only (no playlists).

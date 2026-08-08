@@ -1,39 +1,45 @@
-# dirdiff — directory comparison
+## Compare two directories
 
-Compares two directories by filename, size, and SHA256. Opens native Explorer-style folder pickers and prints a detailed report.
+- **Source:** `src/dirdiff.cs`
+- **Dependencies:** `System.Windows.Forms` (native folder pickers)
+- **Description:** Compares two directories by filename, size, and SHA256, and prints a detailed report.
+
+---
+
+### Usage
 
 ```
 dirdiff [<source> <destination>]
 ```
 
-## Modes
-
 | Args | Behavior |
 |---|---|
-| `dirdiff "D:\src" "D:\dst"` | Compare the two paths directly — works on any OS |
+| `dirdiff "D:\src" "D:\dst"` | Compare the two paths directly - works on any OS |
 | `dirdiff` | Opens two Explorer-style folder pickers (Windows only) |
 
-Config file: `conf/.thr` — contains a single number (default 8, max 32) for parallel hash threads. Cap prevents accidental CPU thrashing from unreasonably high values.
+---
 
-## How it works
+### How it works
 
-### Source and destination
+#### Input
 
-If two arguments are provided, they're used directly as source and destination paths — this works on any OS. If no arguments are given (Windows only), two Explorer-style folder pickers pop up sequentially using `OpenFileDialog` with `ValidateNames = false` and `CheckFileExists = false`.
+With two arguments, they're used directly as source and destination. Without arguments (Windows only), two Explorer-style folder pickers pop up sequentially using `OpenFileDialog` with `ValidateNames = false` and `CheckFileExists = false`.
 
-### Directory scanning
+#### Scanning
 
-`Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)` recursively walks each selected directory. Each file's relative path is computed by stripping the root prefix. Files that can't be stat'd (permission, locked) are silently skipped.
+`Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)` recursively walks each directory. Each file's relative path is computed by stripping the root prefix. Files that can't be stat'd (permission, locked) are silently skipped.
 
-### Three comparisons
+#### Comparisons
 
 | Check | Method | What's reported |
 |---|---|---|
-| **Presence** | `HashSet` difference on relative paths | Missing (in source only) and extra (in dest only) files |
-| **Size** | `FileInfo.Length` comparison | Path + both byte counts when they differ |
-| **SHA256** | `Parallel.ForEach` (up to 32 threads), 1 MB chunks | Count of mismatched or unreadable files |
+| Presence | `HashSet` difference on relative paths | Missing (source only) and extra (dest only) files |
+| Size | `FileInfo.Length` comparison | Path + both byte counts when they differ |
+| SHA256 | `Parallel.ForEach`, 1 MB chunks | Count of mismatched or unreadable files |
 
-### Example output
+Thread count comes from `conf/.thr` - a single number, default 8, max 32. The cap prevents accidental CPU thrashing from unreasonably high values.
+
+#### Example output
 
 ```
   ================================================
@@ -59,16 +65,36 @@ If two arguments are provided, they're used directly as source and destination p
   All 959 files verified OK.
 ```
 
-## Design decisions
+---
 
-- **Why C# over Python:** The original Python dirdiff launched a PowerShell subprocess to show a folder picker. That meant two runtimes (Python + PowerShell) and a fragile command-line construction. C# calls `System.Windows.Forms.OpenFileDialog` directly — no subprocess, no runtime dependencies.
-- **Why a folder picker instead of CLI arguments:** Directory comparison is inherently interactive. A folder dialog is faster, eliminates typos, and shows the actual filesystem tree.
-- **Why parallel hashing:** SHA256 of large files is CPU-bound. Hashing sequentially can take minutes for many large files. `Parallel.ForEach` with configurable threads saturates modern CPUs.
-- **Why OpenFileDialog repurposed as a folder picker:** The classic `FolderBrowserDialog` is an XP-era tree widget with no address bar, search, or quick access. The OpenFileDialog trick gives the full modern Explorer dialog.
+### Design decisions
 
-## Known limitations
+- **C# over Python:** The original Python dirdiff launched a subprocess to show a folder picker. That meant two runtimes and a fragile command construction. C# calls `System.Windows.Forms.OpenFileDialog` directly - no subprocess, no runtime dependencies.
+- **Folder picker instead of CLI arguments:** Directory comparison is inherently interactive. A folder dialog is faster, eliminates typos, and shows the actual filesystem tree.
+- **Parallel hashing:** SHA256 of large files is CPU-bound. Hashing sequentially can take minutes. `Parallel.ForEach` with configurable threads saturates modern CPUs.
+- **OpenFileDialog repurposed as a folder picker:** The classic `FolderBrowserDialog` is an XP-era tree widget with no address bar, search, or quick access. The OpenFileDialog trick gives the full modern Explorer dialog.
 
-- No single-file diff — only presence/size/hash comparison, no line-by-line diff.
-- No filtering — all files are included. Use `dirdiff | grep` at the shell level.
-- In-memory file map — directories with millions of files will use significant memory.
-- Hash progress counter is approximate — files complete in non-deterministic order.
+---
+
+### Source tree
+
+```
+shared/
+├── src/
+│   └── dirdiff.cs         ← single-file source
+├── bin/
+│   └── dirdiff.exe        ← compiled binary
+├── conf/
+│   └── .thr               ← parallel hash thread count
+└── docs/
+    └── dirdiff.md
+```
+
+---
+
+### Known limitations
+
+- No single-file diff - only presence/size/hash comparison, no line-by-line diff.
+- No filtering - all files are included. Use `dirdiff | grep` at the shell level.
+- In-memory file map - directories with millions of files will use significant memory.
+- Hash progress counter is approximate - files complete in non-deterministic order.
