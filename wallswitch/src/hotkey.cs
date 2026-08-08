@@ -53,6 +53,7 @@ static class Hotkey {
     public static bool Parse(string spec, out uint mods, out uint vk) {
         mods = 0;
         vk = 0;
+        bool bareKey = false;
         foreach (string part in spec.Split('+')) {
             string token = part.Trim();
             if (token.Length == 0) return false;
@@ -70,12 +71,15 @@ static class Hotkey {
             }
             else if (token.Length >= 2 && (token[0] == 'F' || token[0] == 'f')) {
                 int n;
-                if (int.TryParse(token.Substring(1), out n) && n >= 1 && n <= 24)
+                if (int.TryParse(token.Substring(1), out n) && n >= 1 && n <= 24) {
                     vk = (uint)(0x70 + n - 1);
+                    if (n <= 12) bareKey = true;
+                }
                 else return false;
             }
             else return false;
         }
-        return mods != 0 && vk != 0;
+        if (mods != 0) return vk != 0;
+        return bareKey;
     }
 }

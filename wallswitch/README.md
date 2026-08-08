@@ -36,7 +36,7 @@ To change the wallpaper without the hotkey, delete `bin/state` to recreate the c
 
 #### Hotkey listener
 
-The hidden `HotkeyForm` overrides `WndProc` to catch `WM_HOTKEY` (0x0312), then calls `Advance()`. The combo is parsed from the `Hotkey=` config value (e.g. `Ctrl+Alt+W`); modifiers are `Ctrl`/`Alt`/`Shift`/`Win` (aliases `Super`/`Meta`/`Cmd`), and the key is a letter, digit, `space`, or `F1`-`F24`. At least one modifier is required - Windows won't register a bare key. If the combo is already in use, `RegisterHotKey` fails and a warning dialog is shown.
+The hidden `HotkeyForm` overrides `WndProc` to catch `WM_HOTKEY` (0x0312), then calls `Advance()`. The combo is parsed from the `Hotkey=` config value (e.g. `Ctrl+Alt+W`); modifiers are `Ctrl`/`Alt`/`Shift`/`Win` (aliases `Super`/`Meta`/`Cmd`), and the key is a letter, digit, `space`, or `F1`-`F24`. A bare key (no modifier) is only accepted for `F1`-`F12`, e.g. `Hotkey=F7` - Windows won't register other bare keys. If the combo is already in use, `RegisterHotKey` fails and a warning dialog is shown.
 
 #### Shuffle queue
 
@@ -72,7 +72,7 @@ Both are needed: registry alone requires logoff/logon to take effect; `SystemPar
 | Key | Required | Default | Description |
 |---|---|---|---|
 | `AssetsDir` | no | `assets` | Image directory. Relative paths resolve against the `.exe` folder. |
-| `Hotkey` | yes | - | Global hotkey combo, e.g. `Ctrl+Alt+W` |
+| `Hotkey` | yes | - | Global hotkey combo, e.g. `Ctrl+Alt+W` or bare `F7` |
 
 Other settings are hardcoded in source:
 
