@@ -1,4 +1,4 @@
-# kdbxPushToRemote — deep-dive documentation
+# kdbxPushToRemote - deep-dive documentation
 
 **Tool:** `bin\kdbxPushToRemote.exe`
 **Source:** `src\push.cs`
@@ -16,11 +16,11 @@ File: `bin\.push.conf`
 | Key | Required | Default | Description |
 |---|---|---|---|
 | `sourceDir` | no | `..\databaseCopies` | Local folder to push. Relative paths resolve against the `.exe`'s own folder. |
-| `Remotes` | no | — | Comma-separated rclone remote names. Must match names in `rclone config` exactly (case-sensitive). |
+| `Remotes` | no | - | Comma-separated rclone remote names. Must match names in `rclone config` exactly (case-sensitive). |
 | `RemotePath` | no | `kdbx-backup` | Folder name to create inside each remote. |
 | `logFile` | no | `..\logs\push.log` | Append-only log. The shipped config uses `..\logs\rclone.log`; both land in the shared `kdbx-backup\logs\` folder. |
 
-rclone is always launched as `rclone` from PATH — not configurable.
+rclone is always launched as `rclone` from PATH - not configurable.
 
 ---
 
@@ -32,7 +32,7 @@ explicit about.
 `rclone sync` mirrors the source to the destination *exactly*, including
 **deleting from the remote anything not present locally**. If `rclone sync`
 were used, anything pruned or removed from `databaseCopies\` locally would
-be deleted from all cloud remotes too — defeating the purpose of cloud
+be deleted from all cloud remotes too - defeating the purpose of cloud
 backup, which is to retain history. `rclone copy` only uploads what's
 missing on the remote and never deletes anything. The cloud becomes an
 append-only archive of every snapshot that ever existed locally.
@@ -45,7 +45,7 @@ append-only archive of every snapshot that ever existed locally.
 
 ## Why three providers
 
-Three providers were chosen for genuine redundancy — meaning they fail
+Three providers were chosen for genuine redundancy - meaning they fail
 independently of each other. The three in use:
 
 | Remote name | Provider | Type | Notes |
@@ -58,7 +58,7 @@ All three were pre-existing rclone remotes, so no new OAuth setup was
 needed. The `kdbx-backup` folder is created inside each remote on first
 push.
 
-Free tiers on all three are sufficient for `.kdbx` files — even with
+Free tiers on all three are sufficient for `.kdbx` files - even with
 unlimited cloud retention (no pruning on remotes), the total size of
 thousands of snapshots of five small databases remains well within any
 free tier.
@@ -72,7 +72,7 @@ Each remote is a separate `rclone copy` child process, launched via
 asynchronously (to avoid deadlocks if both buffers fill simultaneously)
 and written to the log file after the process exits.
 
-Sequential, not parallel — one remote at a time. Rationale: simplicity
+Sequential, not parallel - one remote at a time. Rationale: simplicity
 over speed. A failed remote doesn't block the others; if Google fails,
 Dropbox and Koofr still run. Upload time for small `.kdbx` files is
 negligible, so parallelism buys nothing meaningful.
@@ -83,9 +83,9 @@ for log files rather than a multi-line progress dashboard.
 Exit codes:
 - `0` → logged as `<remote>: OK`
 - Non-zero → logged as `<remote>: FAILED (exit <code>)`
-- Exception launching rclone → logged as `<remote>: ERROR launching rclone — <message>`
+- Exception launching rclone → logged as `<remote>: ERROR launching rclone - <message>`
 
-A failed remote does **not** stop execution — the loop continues to the
+A failed remote does **not** stop execution - the loop continues to the
 next remote regardless.
 
 ---
@@ -130,7 +130,7 @@ via `Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, relPat
 
 `AppDomain.CurrentDomain.BaseDirectory` = the folder containing
 `kdbxPushToRemote.exe`, not the process CWD. See `kdbxWatch.md` for the
-full reasoning — same principle applies here.
+full reasoning - same principle applies here.
 
 ---
 
@@ -151,19 +151,19 @@ message:
 
 Per-remote messages:
 
-- `Pushing to <Remote>` — starting the rclone copy for that remote.
-- `Push completed to <Remote>` — rclone exited 0.
-- `Push failed to <Remote> (exit N)` — rclone exited non-zero (e.g. exit 1
-  on a network failure). rclone's own stdout/stderr is not logged — the
+- `Pushing to <Remote>` - starting the rclone copy for that remote.
+- `Push completed to <Remote>` - rclone exited 0.
+- `Push failed to <Remote> (exit N)` - rclone exited non-zero (e.g. exit 1
+  on a network failure). rclone's own stdout/stderr is not logged - the
   failure line is the only record.
-- `Push failed to <Remote> (<message>)` — rclone could not be launched at
+- `Push failed to <Remote> (<message>)` - rclone could not be launched at
   all (e.g. not on PATH).
 
 ---
 
 ## Adding or removing a remote
 
-Edit `Remotes=` in `.push.conf`. No recompile needed. Example — add a
+Edit `Remotes=` in `.push.conf`. No recompile needed. Example - add a
 fourth remote:
 
 ```ini
@@ -181,10 +181,10 @@ just remove it from the `Remotes=` line.
 ## Known limitations
 
 - **No retry logic.** If a remote fails, it's logged and skipped. The
-  next scheduled run will retry (rclone copy picks up where it left off —
+  next scheduled run will retry (rclone copy picks up where it left off -
   already-uploaded folders are skipped, only missing ones are uploaded).
 - **No network check before starting.** If the machine has no internet,
-  all three remotes fail and log errors. Not a problem in practice — the
+  all three remotes fail and log errors. Not a problem in practice - the
   next scheduled run will succeed when connectivity is restored, and
   rclone copy is idempotent.
-- **rclone must be on PATH** — the executable path is hardcoded to `rclone`. If rclone is installed elsewhere, add its directory to PATH or use a symlink.
+- **rclone must be on PATH** - the executable path is hardcoded to `rclone`. If rclone is installed elsewhere, add its directory to PATH or use a symlink.

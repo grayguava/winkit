@@ -1,15 +1,12 @@
-# diskwatch — disk health monitor with change detection
+## Monitor disk health
 
-Read-only disk health monitor that runs system checks, compares results against previous state, and alerts you when something changes. Silent when healthy.
-
-- **Tool:** `diskwatch/bin/diskwatch.exe`
-- **Source:** `diskwatch/src/`
-- **Language:** C#, compiled via `csc.exe` as winexe (no console window)
-- **Role:** Detection only. Never runs DISM, SFC, chkdsk /f, or SMART self-tests.
+- **Source:** `diskwatch/src/` (program.cs, commandrunner.cs, config/, models/, parsers/, popup/)
+- **Dependencies:** Windows built-ins (`fsutil`, `chkdsk`) + optional `smartctl` (smartmontools)
+- **Description:** Read-only disk health monitor that runs system checks, compares results against previous state, and alerts you when something changes. Silent when healthy. Detection only - never repairs.
 
 ---
 
-## Usage
+### Usage
 
 ```
 diskwatch
@@ -17,339 +14,154 @@ diskwatch
 
 Runs all checks, prints a verdict to the console (still visible if run from a terminal), and shows a dark-themed popup with aligned monospace layout. Intended to be driven by Task Scheduler; the popup is the core output.
 
-### Exit codes
+Admin rights are required - `fsutil`, `chkdsk`, and full `smartctl` data all need elevation.
+
+#### Exit codes
 
 | Code | Meaning |
 |---|---|
-| 0 | Healthy — no changes since last check |
+| 0 | Healthy - no changes since last check |
 | 1 | Something changed (important attrs only) |
 
-### Mutex
-
-A named mutex prevents concurrent instances. If diskwatch is already running, a second launch prints `diskwatch is already running.` and exits.
+A named mutex prevents concurrent instances - a second launch prints `diskwatch is already running.` and exits.
 
 ---
 
-## What it checks
+### How it works
 
-### fsutil dirty query
+#### Checks
 
-Reads the volume dirty bit for each configured drive. A set dirty bit means the filesystem detected corruption and will run chkdsk at next boot.
+| Check | Command | What it reports |
+|---|---|---|
+| Dirty bit | `fsutil dirty query C:` | Whether the volume dirty bit is set (means chkdsk runs at next boot) |
+| Filesystem scan | `chkdsk C: /scan` | Read-only scan of filesystem metadata; access denied, clean, problems, or bad sector count |
+| SMART | `smartctl -x /dev/sda` | Drive identity, overall health, endurance, watched attributes |
 
-```
-fsutil dirty query C:
-```
+The exact commands come from `bin/.cmds`, grouped by section. Only `fsutil`, `chkdsk`, and `smartctl` are accepted as executables; argument strings are sanitized against shell metacharacters. Invalid entries are silently skipped.
 
-Parsed for: "NOT Dirty" (clean), "is set" (dirty).
+SMART attributes to track come from `bin/.smart` in `ID=Name` format. The first 5 are **important** (shown in the popup's Critical Health section, trigger warnings on change); the rest are **extras** (informational only).
 
-### chkdsk /scan
+#### State and comparison
 
-Performs a read-only scan of the filesystem metadata and reports problems without repairing anything.
+Every run saves parsed state to `logs/<timestamp>/result.json`. The previous run's `result.json` is loaded as the comparison baseline. The following differences trigger a change (exit 1 + warning popup):
 
-```
-chkdsk C: /scan
-```
+- Dirty bit toggled
+- Filesystem status changed
+- Bad sector count changed
+- SMART health changed
+- SMART endurance changed
+- Any important SMART attribute changed
 
-Parsed for:
-- **Access Denied** — tool not elevated, result unknown.
-- **found no problems / No further action** — filesystem is clean.
-- **found problems / problems found** — issues detected.
-- **KB in bad sectors** — exact count of bad sector reallocations.
+Extra attribute changes are tracked but never trigger a warning. If no previous state exists (first run), no changes are reported.
 
-### smartctl -x
+#### Raw output logging
 
-Runs smartctl with full output for each configured device. Parsed for:
-- **Device Model, Serial Number, Firmware Version** — drive identity.
-- **SMART overall-health self-assessment test result** — PASSED/FAILED.
-- **Percentage Used Endurance Indicator** — remaining endurance (NVMe).
-- **Watched attributes** — tracked by ID from config; stored by name.
+Every run also saves the raw command output to `logs/<timestamp>/runs/` (compact JSON per command). If the parser ever misinterprets a tool's output, the raw output is still there for manual inspection.
 
----
+Only the 5 most recent timestamped run directories are kept; older runs are pruned on each execution.
 
-## Configuration
+#### Popup
 
-### .cmds
+At the end of every run, a custom dark-themed dialog with Consolas monospace font shows the summary (unless `.warnc` sets `warnOnly=true` and nothing important changed):
 
-`bin/.cmds` lists every command to run, grouped by section. Each section is a command category; each line under it is a full command:
+| Condition | Title text |
+|---|---|
+| No important changes | "Critical values are stable since last run." |
+| Important changes detected | "Some critical values have changed since the last run." |
+
+A dim Extra button opens the full categorized SMART breakdown in the same window - device identity, health, endurance, the Critical Health table, and the extras table, all right-aligned and scrollable when overflowing.
+
+#### Configuration
+
+`bin/.cmds` - commands to run, grouped by section:
 
 ```ini
-# commands to run, grouped by section
 [fsutil]
 fsutil dirty query C:
 fsutil dirty query D:
 
 [chkdsk]
 chkdsk C: /scan
-chkdsk D: /scan
 
 [smartctl]
 smartctl -x /dev/sda
 ```
 
-The first word of each line is the executable, the rest are its arguments. Only `fsutil`, `chkdsk`, and `smartctl` are accepted as executables; argument strings are sanitized against shell metacharacters. Invalid entries are silently skipped. Section names determine how the parser interprets output:
-- `[fsutil]` — dirty bit check via fsutil. Drive letter extracted from output.
-- `[chkdsk]` — read-only filesystem scan. Drive letter extracted from output.
-- `[smartctl]` — SMART data. Device keyed by section+index.
-
-### .smart
-
-`bin/.smart` lists SMART attributes to track in `ID=Name` format. The first 5 are **important** (shown in the Critical Health section of the popup and trigger warnings on change). The rest are **extras** (informational, shown in the Extra view, no warning).
+`bin/.smart` - SMART attributes to track (first 5 = important, rest = extras):
 
 ```ini
-# SMART attrs to track (ID=Name). First 5 = important, rest = extras
 5=Reallocated Sectors
 197=Current Pending Sectors
 198=Offline Uncorrectable
-196=Reallocation Events
-199=UDMA CRC Errors
-
 169=Endurance Remaining
 194=Temperature Celsius
-9=Power On Hours
-177=Wear Leveling Count
-241=Total LBAs Written
-242=Total LBAs Read
-1=Raw Read Error Rate
 ```
 
-Names are human-readable (spaces allowed) and used as keys in result.json. Lines starting with `#` or `;` are comments. Blank lines are ignored.
-
-### .warnc
-
-`bin/.warnc` holds behavior flags for the scanner:
+`bin/.warnc` - behavior flags:
 
 ```ini
 # warnOnly=true -> popup only when something changed, false -> popup every scan
 warnOnly=false
 ```
 
-| Key | Values | Description |
-|---|---|---|
-| `warnOnly` | `true` / `false` | When `true`, diskwatch runs silently and only shows the popup when something changed. When `false` (or config missing), it shows the popup after every scan. |
+---
+
+### Design decisions
+
+- **Read-only:** diskwatch never repairs, cleans, or modifies the system. Automated repair (DISM, SFC, chkdsk /f) can cause more damage than it fixes when triggered without human judgment. The tool's job is to tell you something changed - you decide what to do.
+- **Change detection over logging:** logging every run creates noise; most runs are identical. Change detection suppresses the common case and surfaces deltas. The exit code makes it scriptable.
+- **Raw output preserved:** if the parser misinterprets a tool's output (new Windows version, locale differences), the raw output is still available for manual inspection.
+- **Static device list over auto-detection:** auto-detecting drives via WMI adds complexity and can miss devices. A static config list is simpler and more predictable.
+- **No daemon mode:** disk health checks are IO-intensive and don't need sub-minute granularity. Task Scheduler with a periodic trigger is the right tool.
+- **Custom dialog over MessageBox:** the monospace Consolas dialog enables aligned tables that would be misaligned in MessageBox's proportional font.
 
 ---
 
-## State and change detection
+### References
 
-### result.json
-
-Pretty-printed JSON stored in `logs/<timestamp>/result.json` after every run. Contains parsed state for all drives and SMART devices. The previous run's `result.json` is loaded as the comparison baseline — no root-level `logs/result.json` duplicate. Loaded via `JavaScriptSerializer` for deserialization; written with a custom pretty-printer.
-
-Structure:
-
-```json
-{
-  "timestamp": "2026-07-30T11:14:26.0000000",
-  "drives": {
-    "C": {
-      "dirty": false,
-      "filesystem": "clean",
-      "badSectorsKb": -1
-    }
-  },
-  "smart": {
-    "sda": {
-      "model": "CONSISTENT S6 SSD 256GB",
-      "serial": "AA000000000000001311",
-      "firmware": "V0422A0",
-      "health": "FAILED",
-      "endurance": 98,
-      "important": {
-        "Reallocated Sectors": 41,
-        "Current Pending Sectors": 41,
-        "Offline Uncorrectable": 32,
-        "Reallocation Events": 32,
-        "UDMA CRC Errors": 1
-      },
-      "extras": {
-        "Temperature Celsius": 50,
-        "Power On Hours": 1626,
-        "Total LBAs Written": 193694,
-        "Total LBAs Read": 276902
-      }
-    }
-  }
-}
-```
-
-SMART attributes are stored by name (not numeric ID). The `important` and `extras` split is determined by position in `.smart` (first 5 = important).
-
-### Diff comparison
-
-On every run, the current state is compared against the previous state loaded from the newest timestamped run directory's `result.json`. The following differences trigger a change:
-
-- **Dirty bit** toggled.
-- **Filesystem status** changed (clean / issues / unknown).
-- **Bad sector count** changed.
-- **SMART health** changed (PASSED / FAILED).
-- **SMART endurance** changed.
-- **Any important SMART attribute** changed.
-
-Extra SMART attribute changes are tracked but do NOT trigger a warning popup or exit code 1.
-
-If no previous state exists (first run), no changes are reported.
-
-### Raw output logging
-
-Every run saves the raw command output to `logs/<timestamp>/runs/` directory:
-
-```
-logs/
-├── 2026-07-30T11-14-26/
-│   ├── result.json
-│   └── runs/
-│       ├── fsutil_C.json
-│       ├── chkdsk_C.json
-│       └── smartctl_sda.json
-└── 2026-07-10T09-15-00/
-    └── ...
-```
-
-Each file contains:
-
-```json
-{"ExitCode":0,"Output":"..."}
-```
-
-Raw output files use inline JSON (compact, no pretty printing).
-
-### Log retention
-
-Only the 5 most recent timestamped run directories are kept. Older runs are pruned automatically on each execution.
+- [smartmontools](https://www.smartmontools.org/) - provides `smartctl` (optional but required for SMART checks)
 
 ---
 
-## Popup
-
-<img src="popup.png" alt="diskwatch popup" width="380"/>
-  
-At the end of every run, a custom dark-themed dialog with Consolas monospace font shows the summary (unless `.warnc` sets `warnOnly=true` and nothing important changed). Two tiers:
-
-| Condition | Icon | Title text |
-|---|---|---|
-| No important changes | Information | "Critical values are stable since last run." |
-| Important changes detected | Warning | "Some critical values have changed since the last run." |
-
-Layout:
-
-```
-<status line>
-
-<date>
-
-Drive C: Clean.
-Drive D: Clean | 41 KB in bad sectors.
-
-SMART Overall Health: FAILED
-
-Critical Health
-──────────────────────────────
-Reallocated Sectors         41
-Current Pending Sectors     41
-Offline Uncorrectable       32
-Reallocation Events         32
-UDMA CRC Errors              1
-```
-
-A dim **Extra** button (left) opens the full categorized SMART breakdown in the same window — scrollable if it overflows, with **Back** replacing **OK** while viewing it. It lists device identity (model/serial/firmware), health, endurance, the Critical Health table, and the extras table (temperature, power-on hours, LBAs written/read). Values are right-aligned.
-
----
-
-## Building
-
-### Prerequisites
-
-- .NET Framework 4.0+ (ships with Windows 8+; available for Windows 7).
-- `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe` — part of the .NET Framework SDK.
-- `System.Web.Extensions.dll`, `System.Windows.Forms.dll`, `System.Drawing.dll` — reference assemblies that ship with .NET Framework.
-
-### Build
-
-```
-build.bat
-```
-
-Compiles all source files in `src/` to `bin/diskwatch.exe` as a winexe (no console window). No Visual Studio, no NuGet, no dotnet CLI, no install step.
-
-### Build output
+### Source tree
 
 ```
 diskwatch/
 ├── src/
-│   ├── program.cs           ← Main(), mutex, runs commands, Event Log reader
-│   ├── commandrunner.cs     ← Process launcher (no timeout)
+│   ├── program.cs           ← Main(), mutex, command running
+│   ├── commandrunner.cs     ← process launcher
 │   ├── config/
-│   │   ├── commands.cs      ← Command struct + .cmds loading/validation
-│   │   ├── smartattrs.cs    ← SmartAttrDef + .smart loading
-│   │   └── settings.cs      ← .warnc loading (warnOnly flag)
+│   │   ├── commands.cs      ← .cmds loading/validation
+│   │   ├── smartattrs.cs    ← .smart loading
+│   │   └── settings.cs      ← .warnc loading
 │   ├── models/
 │   │   ├── state.cs         ← DriveState, SmartState, MasterState
-│   │   └── persistence.cs   ← MasterStateManager: load/save/diff, JSON mapping
+│   │   └── persistence.cs   ← load/save/diff, JSON mapping
 │   ├── parsers/
-│   │   ├── conf.cs           ← shared config reader (lines, key=value, bool)
-│   │   ├── build.cs         ← MasterStateManager.Build (runs dir → MasterState)
-│   │   ├── chkdsk.cs        ← fsutil dirty + chkdsk output parsing
-│   │   └── smartctl.cs      ← smartctl output parsing
+│   │   ├── conf.cs          ← shared config reader
+│   │   ├── build.cs         ← run directory → MasterState
+│   │   ├── chkdsk.cs        ← fsutil + chkdsk parsing
+│   │   └── smartctl.cs      ← smartctl parsing
 │   └── popup/
-│       ├── window.cs        ← popup dialog: main/extra views, aligned tables
-│       └── scrollpanel.cs   ← CustomScrollPanel (custom slim scrollbar)
+│       ├── window.cs        ← popup dialog (main/extra views)
+│       └── scrollpanel.cs   ← custom slim scrollbar
 ├── bin/
-│   ├── diskwatch.exe        ← compiled binary (build output)
+│   ├── diskwatch.exe       ← compiled binary
 │   ├── .cmds                ← commands to run (edit this)
 │   ├── .smart               ← SMART attr IDs and names (edit this)
-│   └── .warnc               ← behavior flags (warnOnly)
-├── logs/                    ← auto-created, holds per-run dirs with result.json + runs/
+│   └── .warnc               ← behavior flags
+├── logs/                    ← per-run dirs: result.json + runs/
+├── popup.png                ← popup screenshot for docs
 ├── build.bat
-└── README.md
+└── README.md                ← this document
 ```
 
 ---
 
-## Design decisions
+### Known limitations
 
-### Why read-only
-
-diskwatch never repairs, cleans, or modifies the system. It only reads diagnostic data and flags changes. The reasoning: automated repair tools (DISM, SFC, chkdsk /f) can cause more damage than they fix when triggered without human judgment. The tool's job is to tell you something changed — you decide what to do about it.
-
-### Why change detection instead of logging
-
-Logging every run creates noise — most runs are identical. Change detection suppresses the common case (healthy, no changes) and only surfaces deltas. The exit code (0 = clean, 1 = change) makes it scriptable: a Task Scheduler trigger on non-zero exit can send an alert.
-
-### Why raw output is preserved
-
-If the parser misinterprets a tool's output (new Windows version, locale differences), the raw output is still available in `logs/<timestamp>/` for manual inspection without re-running.
-
-### Why smartctl device paths are manual
-
-Auto-detecting drives via WMI or device enumeration adds complexity and can miss devices. A static config list is simpler and more predictable — you know exactly what the tool checks.
-
-### Why no daemon mode
-
-Disk health checks are IO-intensive (fsutil, chkdsk, smartctl all read from disk) and don't need sub-minute granularity. Task Scheduler with a weekly trigger is the right tool for periodic monitoring.
-
-### Why a custom dialog instead of MessageBox
-
-The monospace dialog with Consolas font enables aligned tables (Critical Health, plus the categorized Extra view) that would be misaligned in MessageBox's proportional font.
-
----
-
-## Compatibility
-
-| Aspect | Status |
-|---|---|
-| OS | Windows 7+ (requires .NET Framework 4.0+) |
-| Architecture | x64 (recompile for x86 if needed) |
-| File system checks | NTFS, ReFS (via fsutil + chkdsk) |
-| SMART | Any drive supported by smartctl |
-| Dependencies | None beyond Windows built-ins + optional smartctl |
-| Admin required | Yes — for fsutil, chkdsk, and full smartctl data |
-
----
-
-## Known limitations
-
-- **Admin required** — run as Administrator. Without elevation, fsutil reports "Access Denied", chkdsk cannot scan, and smartctl may show limited data.
-- **Windows-only** — uses fsutil, chkdsk, and smartctl.
-- **smartctl optional but manual** — must be installed and configured in .cmds if you want SMART checks. Not bundled. Download the Windows package from [smartmontools](https://www.smartmontools.org/wiki/Download#InstalltheWindowspackage).
-- **No drive discovery** — configure every drive in .cmds and SMART attrs in .smart.
-- **No daemon mode** — use Task Scheduler for periodic runs.
+- **Admin required** - without elevation, `fsutil` reports Access Denied, `chkdsk` cannot scan, and `smartctl` may show limited data.
+- **Windows-only** - uses `fsutil`, `chkdsk`, and `smartctl`.
+- **smartctl optional but manual** - install and configure it in `.cmds` if you want SMART checks; not bundled.
+- **No drive discovery** - every drive must be configured in `.cmds` and SMART attrs in `.smart`.
+- **No daemon mode** - use Task Scheduler for periodic runs.

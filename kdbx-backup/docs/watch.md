@@ -1,4 +1,4 @@
-# kdbxWatch — deep-dive documentation
+# kdbxWatch - deep-dive documentation
 
 **Tool:** `bin\kdbxWatch.exe`
 **Source:** `src\watcher.cs`
@@ -14,12 +14,12 @@ File: `bin\.watch.conf`
 
 | Key | Required | Default | Description |
 |---|---|---|---|
-| `sourceDir` | yes | — | Directory to watch for `.kdbx` files. Spaces and special characters (e.g. `&`) work fine — no quoting needed, no trailing backslash needed. |
+| `sourceDir` | yes | - | Directory to watch for `.kdbx` files. Spaces and special characters (e.g. `&`) work fine - no quoting needed, no trailing backslash needed. |
 | `DestDir` | no | `snapshots` | Snapshot destination. Relative paths resolve against the `.exe`'s own folder. In production: `D:\Tools\kdbx-backup\databaseCopies` (absolute) or `..\..\databaseCopies` (relative). |
 | `DebounceSeconds` | no | `5` | Seconds to wait after the last filesystem event on a file before processing. Absorbs multi-event saves. |
 | `logFile` | no | `logs\watch.log` | Append-only log. In production: `..\logs\watch.log` (shared log folder at project root). |
 
-Hashing is always SHA256 — it is hardcoded, not configurable. The snapshot
+Hashing is always SHA256 - it is hardcoded, not configurable. The snapshot
 manifest is always named `SHA256SUMS.txt`.
 
 ---
@@ -35,7 +35,7 @@ manifest is always named `SHA256SUMS.txt`.
 4. Log `Started. Watching: <SourceDir>`.
 5. Call `TakeBaselineSnapshot()`.
 6. Start `FileSystemWatcher` on `SourceDir`, filter `*.kdbx`.
-7. Block forever on `ManualResetEvent` — Task Scheduler ends the process
+7. Block forever on `ManualResetEvent` - Task Scheduler ends the process
    on logoff.
 
 ### Baseline snapshot
@@ -46,7 +46,7 @@ the last run *before* deciding to copy:
 1. Hash all `.kdbx` files currently in `SourceDir`.
 2. Read the most recent snapshot folder's `SHA256SUMS.txt` manifest. The
    newest snapshot is found by walking the `DestDir\MM\dd\HHmmss`
-   hierarchy — each level is zero-padded, so the lexicographically last
+   hierarchy - each level is zero-padded, so the lexicographically last
    entry at each level is the newest. No date parsing needed.
 3. Compare current hashes against manifest hashes.
 4. **If identical:** load hashes into memory, log "Baseline unchanged,
@@ -56,8 +56,8 @@ the last run *before* deciding to copy:
 5. **If different (or no prior snapshot):** copy all files, write
    manifest, log "Baseline snapshot created".
 
-This design choice — using the manifest written by the *previous* run as
-the cross-restart state mechanism — came from an observed bug: before
+This design choice - using the manifest written by the *previous* run as
+the cross-restart state mechanism - came from an observed bug: before
 this check existed, every restart created a new snapshot regardless of
 whether anything had changed, because all state was in-memory only and
 lost on exit.
@@ -98,7 +98,7 @@ When `OnDebounceElapsed` fires for a file:
 6. **If identical:** log "Hash unchanged, skipping". Do nothing. This
    handles the rare case where a write occurs but content is unchanged
    (e.g. a backup or AV tool touching the file without modifying it).
-   KeePassXC itself won't trigger this — it doesn't write the file at all
+   KeePassXC itself won't trigger this - it doesn't write the file at all
    unless content changed.
 7. **If different:** call `TakeSnapshot()`.
 
@@ -107,8 +107,8 @@ When `OnDebounceElapsed` fires for a file:
 `TakeSnapshot` (called while holding `StateLock`):
 
 1. Create a new folder at `DestDir\MM\dd\HHmmss` (current local date and
-   time — e.g. `databaseCopies\08\02\122620`).
-2. Copy **all** `.kdbx` files from `SourceDir` into it — not just the
+   time - e.g. `databaseCopies\08\02\122620`).
+2. Copy **all** `.kdbx` files from `SourceDir` into it - not just the
    triggering file. Every snapshot is a complete point-in-time backup of
    the whole set.
 3. For each copied file, hash **the copy** (not the original). This is
@@ -119,13 +119,13 @@ When `OnDebounceElapsed` fires for a file:
 4. Write `SHA256SUMS.txt` with `filename: hash` per line, sorted by
    filename for stable diffs.
 5. Update `LastHashes` for every file in the snapshot (not just the
-   triggering file) — since the snapshot just captured all of them, the
+   triggering file) - since the snapshot just captured all of them, the
    baseline for all should reflect the snapshot's state.
 
 ### No automatic pruning
 
 Snapshots are never deleted automatically. Local `DestDir` and the cloud
-archive both grow unbounded — prune `DestDir\MM\` month folders manually
+archive both grow unbounded - prune `DestDir\MM\` month folders manually
 when they get large. There is deliberately no retention policy, so the
 cloud keeps every snapshot that ever existed locally.
 
@@ -156,12 +156,12 @@ don't interleave partial lines in the log file.
 
 Two layers:
 
-1. **Named mutex** (`Global\kdbxWatchSingleInstance`) — checked as the
+1. **Named mutex** (`Global\kdbxWatchSingleInstance`) - checked as the
    very first act in `Main()`, before config load or log write. A second
    instance exits before touching anything. The mutex field is kept as a
    static variable to prevent the GC from collecting it and releasing the
    lock while the process runs.
-2. **Task Scheduler setting** — "If task is already running → Do not start
+2. **Task Scheduler setting** - "If task is already running → Do not start
    a new instance." Prevents Task Scheduler itself from spawning a second
    process (e.g. on logoff/logon cycles or RDP reconnects).
 
@@ -173,7 +173,7 @@ launches; the Task Scheduler setting handles automated re-triggers.
 ## Path resolution
 
 All relative paths in `.watch.conf` resolve against
-`AppDomain.CurrentDomain.BaseDirectory` — the directory containing the
+`AppDomain.CurrentDomain.BaseDirectory` - the directory containing the
 `.exe` file, not the process's current working directory.
 
 This matters because Task Scheduler's working directory is not guaranteed
@@ -198,7 +198,7 @@ Tested 2026-06-29 / 2026-07-02:
   silently, first instance unaffected.
 - ✅ Restart across midnight → next log entry starts a new `[dd-MM-yyyy]`
   header block.
-- ⬜ Hash-unchanged skip — not naturally triggered by KeePassXC; only
+- ⬜ Hash-unchanged skip - not naturally triggered by KeePassXC; only
   fires if another tool writes to the source folder without changing content.
 
 ---

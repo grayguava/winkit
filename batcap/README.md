@@ -1,14 +1,16 @@
-# batcap — battery capacity logger
+## Log battery capacity
 
-Logs battery stats via WMI to `logs/batcap.log`. Runs silently — built as a Windows application (`/target:winexe`), no console window. Designed for Task Scheduler.
+- **Source:** `src/program.cs`
+- **Dependencies:** `System.Management.dll` (WMI, ships with Windows)
+- **Description:** Logs battery stats via WMI to `logs/batcap.log`. Runs silently - built as a Windows application (`/target:winexe`), no console window. Designed for Task Scheduler.
 
-- **Tool:** `batcap/bin/batcap.exe`
-- **Source:** `batcap/src/program.cs`
-- **Language:** C#, compiled via `csc.exe`
+To know why I built this tool, read `STORY.md`.
 
-## Usage
+---
 
-Compiled as a Windows application (`/target:winexe`) — no console window. Run via Task Scheduler (daily or weekly trigger) or double-click to log silently.
+### Usage
+
+Run via Task Scheduler (daily or weekly trigger) or double-click to log silently. No console window is shown.
 
 Appends one line to `logs/batcap.log`:
 
@@ -16,7 +18,7 @@ Appends one line to `logs/batcap.log`:
 [2026-07-23 15:01:15] Design=44021mWh Full=44494mWh Remaining=39555mWh Voltage=11794mV ChargeRate=0mW DischargeRate=12949mW Cycles=0 Charging=False
 ```
 
-### Fields
+#### Fields
 
 | Field | Source | Unit |
 |---|---|---|
@@ -29,33 +31,50 @@ Appends one line to `logs/batcap.log`:
 | Cycles | BatteryCycleCount WMI | count |
 | Charging | BatteryStatus WMI | bool |
 
-## Building
+---
 
-```
-build.bat
-```
+### How it works
 
-Uses Windows' built-in C# compiler. No Visual Studio, no NuGet.
+#### Design capacity
 
-## Configuration
+Reads `bin/.conf` - a one-line file with the battery's design capacity in mWh. This value never changes, so it is read from config instead of queried each run (see the story for why WMI can't supply it on this hardware).
 
-`bin/.conf` — one-line file with the battery's design capacity in mWh. Default:
+#### WMI polling
+
+Queries `BatteryFullChargedCapacity`, `BatteryStatus`, and `BatteryCycleCount` via WMI each run. All three return valid data reliably.
+
+#### Logging
+
+Appends one line to `logs/batcap.log` with a timestamp and all fields. Append-only - never rewrites or prunes history.
+
+#### Configuration
+
+`bin/.conf`:
 
 ```ini
 # Design capacity in mWh
 44021
 ```
 
-Edit this if your battery has a different design capacity. Lines starting with `#` are comments.
+Edit if your battery has a different design capacity. Lines starting with `#` are comments.
 
-## Why not powercfg /batteryreport
-`powercfg /batteryreport` generates a battery report at `%USERPROFILE%\battery-report.html`, but on my machine (EliteBook 840 G2) the report shows `-` for every battery capacity field — design capacity, full charge capacity, cycle count, all blank. The Windows "Battery capacity history" and "Battery life estimates" sections are entirely empty.
+---
 
-`powercfg /energy` was also tested as an alternative and does run a valid 60-second trace, but it pulls Design Capacity from the same broken source — its report showed Design and Full Charge as identical values, meaning it's silently falling back to Full Charge for both rather than reading a true separate design figure.
+### Design decisions
 
-The root cause is the `BatteryStaticData` WMI class (which exposes `DesignedCapacity`) intermittently returning a `Generic failure` error on this hardware — likely a driver/ACPI quirk where that specific counter isn't reliably surfaced, even though every other battery counter works fine. Since design capacity never changes, this tool sidesteps the broken class entirely: the true nameplate value (confirmed once via the original working `powercfg /batteryreport`) is hardcoded in `bin/.conf` instead of queried each run. `BatteryFullChargedCapacity`, `BatteryStatus`, and `BatteryCycleCount` all return valid data reliably, so this tool polls those directly each run and appends to a running log for manual trend tracking over time — the historical view `powercfg` was supposed to provide but doesn't on this machine.
+- **Hardcoded design capacity over WMI:** `BatteryStaticData.DesignedCapacity` intermittently fails on this hardware. Since design capacity never changes, the config file removes the dependency on the broken class entirely.
+- **WMI over `powercfg`:** `powercfg /batteryreport` returns blanks for every capacity field on this machine, so the report is useless. WMI counters that do work are polled directly.
+- **Append-only log:** a single running history file for manual trend tracking, exactly the view `powercfg` was supposed to provide.
 
-## Build output
+---
+
+### References
+
+No external references - self-contained.
+
+---
+
+### Source tree
 
 ```
 batcap/
@@ -66,8 +85,15 @@ batcap/
 │   └── .conf                 ← design capacity (edit this)
 ├── logs/
 │   └── batcap.log           ← append-only log file
+├── STORY.md                  ← why batcap exists
 ├── build.bat
-└── README.md
+└── README.md                ← this document
 ```
 
-Requires .NET Framework 4.0+ and `System.Management.dll` (ships with Windows).
+---
+
+### Known limitations
+
+- Silent by design - no console output, no notification on failure.
+- Design capacity is config-derived, not auto-detected - must be set correctly for accurate health percentages.
+- No retention policy - the log grows until you delete it.
