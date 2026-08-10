@@ -16,3 +16,6 @@ logs/
 
 # KDBX snapshot copies
 kdbx-backup/databaseCopies/
+
+# Testing dir
+tests/

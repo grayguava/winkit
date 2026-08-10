@@ -42,7 +42,7 @@ class Program
 
         var commands = CommandConfig.Load(Path.Combine(baseDir, ".cmds"));
         var smartAttrs = SmartAttrConfig.Load(Path.Combine(baseDir, ".smart"));
-        SettingsConfig.Load(Path.Combine(baseDir, ".warnc"));
+        SettingsConfig.Load(Path.Combine(baseDir, ".conf"));
 
         foreach (var cmd in commands)
         {
@@ -57,7 +57,7 @@ class Program
 
         var dirs = new List<string>(Directory.GetDirectories(logsDir));
         dirs.Sort();
-        while (dirs.Count > 5)
+        while (dirs.Count > SettingsConfig.LogRetention)
         {
             Directory.Delete(dirs[0], true);
             dirs.RemoveAt(0);

@@ -42,4 +42,20 @@ static class Conf
         }
         return defaultValue;
     }
+
+    // Read a single integer key (case-insensitive). Missing key or non-numeric -> defaultValue.
+    public static int ReadInt(string path, string wantedKey, int defaultValue)
+    {
+        foreach (string line in Lines(path))
+        {
+            string key, value;
+            if (KeyValue(line, out key, out value)
+                && key.Equals(wantedKey, System.StringComparison.OrdinalIgnoreCase))
+            {
+                int n;
+                if (int.TryParse(value, out n)) return n;
+            }
+        }
+        return defaultValue;
+    }
 }

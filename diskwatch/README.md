@@ -58,11 +58,11 @@ Extra attribute changes are tracked but never trigger a warning. If no previous 
 
 Every run also saves the raw command output to `logs/<timestamp>/runs/` (compact JSON per command). If the parser ever misinterprets a tool's output, the raw output is still there for manual inspection.
 
-Only the 5 most recent timestamped run directories are kept; older runs are pruned on each execution.
+Only the `logRetention` most recent timestamped run directories are kept (configurable in `.conf`, default 5); older runs are pruned on each execution.
 
 #### Popup
 
-At the end of every run, a custom dark-themed dialog with Consolas monospace font shows the summary (unless `.warnc` sets `warnOnly=true` and nothing important changed):
+At the end of every run, a custom dark-themed dialog with Consolas monospace font shows the summary (unless `.conf` sets `warnOnly=true` and nothing important changed):
 
 | Condition | Title text |
 |---|---|
@@ -97,11 +97,13 @@ smartctl -x /dev/sda
 194=Temperature Celsius
 ```
 
-`bin/.warnc` - behavior flags:
+`bin/.conf` - behavior flags:
 
 ```ini
 # warnOnly=true -> popup only when something changed, false -> popup every scan
 warnOnly=false
+# logRetention=N -> keep the N latest scan log folders, delete older ones
+logRetention=5
 ```
 
 ---
@@ -133,7 +135,7 @@ diskwatch/
 │   ├── config/
 │   │   ├── commands.cs      ← .cmds loading/validation
 │   │   ├── smartattrs.cs    ← .smart loading
-│   │   └── settings.cs      ← .warnc loading
+│   │   └── settings.cs      ← .conf loading
 │   ├── models/
 │   │   ├── state.cs         ← DriveState, SmartState, MasterState
 │   │   └── persistence.cs   ← load/save/diff, JSON mapping
@@ -149,7 +151,7 @@ diskwatch/
 │   ├── diskwatch.exe       ← compiled binary
 │   ├── .cmds                ← commands to run (edit this)
 │   ├── .smart               ← SMART attr IDs and names (edit this)
-│   └── .warnc               ← behavior flags
+│   └── .conf               ← behavior flags
 ├── logs/                    ← per-run dirs: result.json + runs/
 ├── popup.png                ← popup screenshot for docs
 ├── build.bat
