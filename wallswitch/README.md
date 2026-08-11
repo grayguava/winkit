@@ -99,7 +99,7 @@ Other settings are hardcoded in source:
 
 ### References
 
-No external references - self-contained. (For WebP support, the [WebP Codec for Windows](https://www.microsoft.com/store/productId/9PG2DK2V6M7P) is an optional add-on.)
+No external references - self-contained. (For WebP support, the [WebP Codec for Windows](https://apps.microsoft.com/detail/9pg2dk419drg) is an optional add-on.)
 
 ---
 
