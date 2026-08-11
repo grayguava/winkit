@@ -1,5 +1,3 @@
-using System.IO;
-
 static class SettingsConfig
 {
     public static bool WarnOnly = false;

@@ -108,11 +108,6 @@ class Etsu
         Console.WriteLine();
     }
 
-    static string Hr(int n)
-    {
-        return new string('\u2500', n);
-    }
-
     public static void WriteLog(string prefix, string outcome, List<string> lines)
     {
         string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");

@@ -1,6 +1,6 @@
 ## Monitor disk health
 
-- **Source:** `diskwatch/src/` (program.cs, commandrunner.cs, config/, models/, parsers/, popup/)
+- **Source:** `diskwatch/src/` (program.cs, commandRunner.cs, config/, models/, parsers/, popup/)
 - **Dependencies:** Windows built-ins (`fsutil`, `chkdsk`) + optional `smartctl` (smartmontools)
 - **Description:** Read-only disk health monitor that runs system checks, compares results against previous state, and alerts you when something changes. Silent when healthy. Detection only - never repairs.
 
@@ -131,7 +131,7 @@ logRetention=5
 diskwatch/
 ├── src/
 │   ├── program.cs           ← Main(), mutex, command running
-│   ├── commandrunner.cs     ← process launcher
+│   ├── commandRunner.cs     ← process launcher
 │   ├── config/
 │   │   ├── commands.cs      ← .cmds loading/validation
 │   │   ├── smartattrs.cs    ← .smart loading

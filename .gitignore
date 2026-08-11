@@ -1,9 +1,6 @@
 # Compiled executables
 *.exe
 
-# Wallpaper assets (personal images)
-wallsys/assets/*.png
-
 # Python cache
 __pycache__/
 *.pyc

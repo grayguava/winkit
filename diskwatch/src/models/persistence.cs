@@ -104,7 +104,6 @@ public static partial class MasterStateManager
 
     class RawResult
     {
-        public int ExitCode { get; set; }
         public string Output { get; set; }
     }
 
