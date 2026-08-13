@@ -6,7 +6,7 @@ I used to have two separate wallpaper tools - one for nature images, one for tec
 
 ## The old approach
 
-The old tools (`archive/wallsys_old/`) worked but had real gaps:
+The old tools (`archive/wallswitch/v1/`) worked but had real gaps:
 
 - **Pure random selection** - the same image could repeat several times before others ever showed.
 - **No state tracking** - nothing persisted across runs, so restarting the machine lost all rotation history.
@@ -15,11 +15,13 @@ The old tools (`archive/wallsys_old/`) worked but had real gaps:
 
 ## The new approach
 
-The nature/tech distinction is purely about which images are in the folder - the tool doesn't need to know or care. So the two binaries were merged into one, with a single `assets/` directory:
+The nature/tech distinction is purely about which images are in the folder - the tool doesn't need to know or care. So the two binaries were merged into one, configurable in `.pools`:
 
+- **Pools over folders** - each pool is its own section in `.pools` with its own directory, hotkey, and mode. Nature and tech are just two pool sections now; adding a third pool is a config edit, not a new tool.
+- **Targets over "just the desktop"** - a pool can apply to the desktop, Windows Terminal's background, and the registry (for reboot persistence), in one press.
 - **A shuffle queue** instead of pure random - every image is shown exactly once before any repeats, so a varied rotation is guaranteed.
-- **A persistent `state` file** - the cycle survives reboots.
-- **Image sync** - added images get merged into the queue, removed ones are dropped silently, with no manual cleanup.
+- **A persistent `state` file per pool** - each pool's cycle survives reboots independently.
+- **Live config reload** - pool `Mode`/`Dir` changes apply on the next press, no restart.
 - **A `build.bat`** - recompiling is one command.
 
-The result is a single always-available hotkey that cycles through a guaranteed-varied wallpaper rotation, with zero maintenance for the pools.
+The result is one daemon with a hotkey per pool, each cycling a guaranteed-varied rotation across every target you enable, with zero maintenance.

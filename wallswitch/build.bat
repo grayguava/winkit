@@ -10,7 +10,8 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-"%CSC%" /nologo /optimize+ /reference:System.Windows.Forms.dll /target:winexe /out:bin\wallswitch.exe src\program.cs src\daemon.cs src\hotkey.cs
+rem compile all src\*.cs recursively (fsFind should catch our subfolders)
+"%CSC%" /nologo /optimize+ /reference:System.Windows.Forms.dll /target:winexe /out:bin\wallswitch.exe /recurse:src\*.cs
 
 if %ERRORLEVEL% EQU 0 (
     echo Build succeeded: bin\wallswitch.exe

@@ -1,0 +1,20 @@
+# wallswitch pools - one section per wallpaper pool.
+# PoolDir: path to the images (relative resolves against the exe folder)
+# PoolKey: global hotkey that triggers this pool (e.g. F7 or Ctrl+Alt+W)
+# Mode:    random = each enabled target gets a different image
+#          sync   = all enabled targets get the same image
+
+[General]
+PoolDir=D:\Backgrounds\General
+PoolKey=F7
+Mode=sync
+
+[Nature]
+PoolDir=D:\Backgrounds\Nature
+PoolKey=Ctrl+Shift+N
+Mode=random
+
+[Tech]
+PoolDir=D:\Backgrounds\Tech
+PoolKey=Ctrl+Shift+T
+Mode=sync

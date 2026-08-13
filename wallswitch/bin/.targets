@@ -1,0 +1,16 @@
+# wallswitch targets - the places a pool can write a wallpaper to.
+# [Desktop] applies the image live to the current desktop.
+# [Terminal] rewrites the backgroundImage in Windows Terminal's settings.json.
+# [Registry] persists it to the registry so it survives reboots.
+# Order matters: applied Desktop -> Terminal -> Registry (registry last).
+# Each section supports Enable plus target-specific keys (SettingsPath).
+
+[Desktop]
+Enable=true
+
+[Terminal]
+Enable=true
+SettingsPath=C:\Users\GingerCat\AppData\Local\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json
+
+[Registry]
+Enable=true
