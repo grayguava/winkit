@@ -1,6 +1,6 @@
 # etsu — ExifTool Simple Use
 
-- **Language:** PowerShell (no modules required), C# binary in `shared/bin/etsu.exe`
+- **Language:** PowerShell
 - **Role:** Interactive tools built around `exiftool` — **read**, **clean**, and **date** subcommands.
 
 ---
@@ -201,7 +201,7 @@ etsu/
 
 | Aspect | Status |
 |---|---|
-| OS | Windows 7+ (requires PowerShell 5.1+ and .NET Framework) |
+| OS | Windows 7+ (requires PowerShell 5.1+) |
 | exiftool | Required on PATH or in `etsu/` directory |
 | File dialog | Native Windows Explorer (via WinForms) |
 | Log format | Plain text UTF-8, append-only |
@@ -210,10 +210,8 @@ etsu/
 ## Known limitations
 
 - **Windows-only** — the WinForms file dialog via `Add-Type` won't work on non-Windows systems.
-- **C# binary** (`shared/bin/etsu.exe`) or **PowerShell** scripts (`etsu/*.ps1`) — both work; C# is recommended for faster startup.
 - **clean.ps1: Sequential processing** — files are processed one at a time. No parallel metadata stripping.
 - **clean.ps1: No dry-run mode** — there is no preview of what metadata will be deleted before committing.
 - **date.ps1: No offset support** — all files get the same timestamp. No per-file timezone or offset adjustment.
 - **date.ps1: FileAccessDate unchanged** — exiftool sets FileCreateDate and FileModifyDate but not FileAccessDate by default. Access time is a NTFS property, not typically meaningful for media files.
 - **read.ps1: Single file only** — one file per invocation.
-- **exiftool must be on PATH or local** — no automatic download or bundled binary.

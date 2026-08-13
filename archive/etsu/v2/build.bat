@@ -10,7 +10,7 @@ if not exist "%CSC%" (
 if not exist bin\ md bin
 
 echo Building clean...
-"%CSC%" /nologo /optimize+ /reference:System.Windows.Forms.dll /target:winexe /out:bin\clean.exe src\clean\core.cs src\clean\ui.cs
+"%CSC%" /nologo /optimize+ /reference:System.Windows.Forms.dll /target:winexe /out:bin\etgui_wrapper.exe src\clean\core.cs src\clean\ui.cs
 if %ERRORLEVEL% NEQ 0 exit /b 1
 
 echo Build succeeded.

@@ -1,6 +1,6 @@
 # ExifTool Metadata Clean — `clean.py`
 
-- **Tool:** `exiftool/src/clean.py`
+- **Tool:** `etsu/v1/src/clean.py`
 - **Language:** Python 3 (stdlib only)
 - **External dependency:** [ExifTool by Phil Harvey](https://exiftool.org/) must be on `PATH`
 - **Role:** Strip all metadata from image, video, and PDF files in-place, with a safe copy-then-swap workflow and automatic `.bak` rollback on failure.
@@ -225,7 +225,7 @@ The tool is designed for occasional interactive use — "I have a batch of files
 
 ### Why logs go next to the script
 
-The log directory is `exiftool/logs/clean/`, relative to the script. This is deliberate:
+The log directory is `logs/clean/`, relative to the script. This is deliberate:
 - No configuration needed for logging — it's automatic.
 - Logs stay with the tool, not scattered across the system.
 - The `logs/` directory is gitignored (or at least not committed).

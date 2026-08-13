@@ -6,7 +6,7 @@ I used to have two separate wallpaper tools - one for nature images, one for tec
 
 ## The old approach
 
-The old tools (`archive/wallsys_old/`) worked but had real gaps:
+The old tools (`archive/wallswitch/v1/`) worked but had real gaps:
 
 - **Pure random selection** - the same image could repeat several times before others ever showed.
 - **No state tracking** - nothing persisted across runs, so restarting the machine lost all rotation history.

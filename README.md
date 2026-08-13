@@ -10,9 +10,9 @@ Each tool is standalone and portable - a single `.exe` compiled with Windows' bu
 
 #### [wallswitch](wallswitch/README.md)
 
-- **Source:** `wallswitch/src/` (program.cs, daemon.cs, hotkey.cs)
+- **Source:** `wallswitch/src/` (core/, platform/)
 - **Dependencies:** `System.Windows.Forms`
-- **Description:** Wallpaper randomizer daemon - a global hotkey cycles through a shuffle queue of images with no repeats until the cycle is exhausted.
+- **Description:** Wallpaper daemon with multiple configurable pools (`.pools`) and targets (`.targets`) - one hotkey per pool cycles a shuffle queue with no repeats until exhausted, applied to the desktop, Windows Terminal background, and registry persistence.
 
 #### [kdbx-backup](kdbx-backup/README.md)
 
@@ -52,7 +52,7 @@ Why some of the tools exist:
 
 - [Why batcap exists](batcap/STORY.md) - `powercfg` shows blanks on an EliteBook; WMI workaround.
 - [Why kdbx-backup exists](kdbx-backup/STORY.md) - the bootstrap problem and the trust chain behind it.
-- [Why wallswitch exists](wallswitch/STORY.md) - merging two wallpaper tools into one shuffle-queue daemon.
+- [Why wallswitch exists](wallswitch/STORY.md) - merging two wallpaper tools into one daemon, then growing pools and targets.
 
 ---
 

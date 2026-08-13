@@ -4,8 +4,6 @@
 - **Dependencies:** `System.Windows.Forms` (hidden window for hotkey messages)
 - **Description:** Background daemon that registers a global hotkey and applies the next image from `assets/` as the desktop wallpaper on each press. Tracks a shuffle queue so images are cycled without repeats, persisted across reboots via the registry.
 
-To know why I built this tool, read `STORY.md`.
-
 ---
 
 ### Usage
