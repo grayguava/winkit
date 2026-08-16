@@ -14,4 +14,4 @@ The `BatteryStaticData` WMI class (which exposes `DesignedCapacity`) intermitten
 
 Since design capacity never changes, this tool sidesteps the broken class entirely: the true nameplate value (confirmed once via the original working `powercfg /batteryreport`) is hardcoded in `bin/.conf` instead of queried each run.
 
-`BatteryFullChargedCapacity` and `BatteryStatus` return valid data reliably, so the tool polls those directly each run (each query isolated so one failing class never blanks the rest) and appends to a running log - the historical view `powercfg` was supposed to provide but doesn't on this machine.
+`BatteryFullChargedCapacity`, `BatteryStatus`, and `BatteryCycleCount` all return valid data reliably, so the tool polls those directly each run and appends to a running log - the historical view `powercfg` was supposed to provide but doesn't on this machine.

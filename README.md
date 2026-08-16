@@ -28,7 +28,7 @@ Each tool is standalone and portable - a single `.exe` compiled with Windows' bu
 
 #### [batcap](batcap/README.md)
 
-- **Source:** `batcap/src/program.cs`
+- **Source:** `batcap/src/` (Config.cs, BatteryReader.cs, program.cs)
 - **Dependencies:** `System.Management.dll` (WMI)
 - **Description:** Battery capacity logger via WMI, appends to `logs/batcap.log`. Silent, designed for Task Scheduler.
 

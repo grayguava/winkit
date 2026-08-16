@@ -11,6 +11,9 @@ _exiftool_tmp_*/
 # Application logs
 logs/
 
+# Runtime state
+*.cyclestate
+
 # KDBX snapshot copies
 kdbx-backup/databaseCopies/
 
