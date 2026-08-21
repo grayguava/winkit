@@ -1,6 +1,6 @@
 ## Read, clean, and set file dates
 
-- **Source:** `src/etsu/etsu.cs` (entry + helpers), `read.cs`, `clean.cs`, `date.cs`
+- **Source:** `src/etsu/etsu.cs` (entry + helpers), `read.cs`, `clean.cs`, `date.cs`, `logconf.cs`
 - **Dependencies:** `System.Windows.Forms` (native file pickers) + external `exiftool`
 - **Description:** Interactive CLI frontend for ExifTool. Reads all metadata from one file, strips EXIF/IPTC/XMP from several (rollback-safe), or sets EXIF dates and filesystem timestamps on several.
 
@@ -24,7 +24,7 @@ Every subcommand shares the same flow: header with the detected ExifTool version
 
 #### read
 
-Picks one file and runs `exiftool "<file>"`, printing every tag with no modification. The file is opened read-only - nothing is written.
+Picks one file and runs `exiftool "<file>"`, printing every tag with no modification. The file is opened read-only - nothing is written. Logging is off by default for this subtool (see Configuration).
 
 #### clean
 
@@ -48,6 +48,33 @@ exiftool -AllDates=<date> -FileModifyDate=<date> -FileCreateDate=<date> \
 ```
 
 `-AllDates=` sets DateTimeOriginal, CreateDate, ModifyDate plus the filesystem mtime; `-FileCreateDate=` sets the filesystem creation timestamp. Empty date input cancels.
+
+---
+
+### Configuration
+
+`conf/.etsu` - one section per subtool, keys case-insensitive, `#` lines are comments:
+
+```ini
+[clean]
+log=true
+logCount=10
+
+[date]
+log=true
+logCount=10
+
+[read]
+log=false
+logCount=10
+```
+
+| Key | Default | Description |
+|---|---|---|
+| `log` | `true` (`false` for `read`) | Write `logs/<tool>_<timestamp>.log` when that subtool runs. |
+| `logCount` | `10` | Keep the N latest logs per subtool; older ones are deleted after each write. |
+
+Missing file or section falls back to these defaults.
 
 ---
 
@@ -75,10 +102,13 @@ shared/
 │       ├── etsu.cs         ← main entry + shared helpers
 │       ├── read.cs         ← metadata viewer
 │       ├── clean.cs        ← metadata stripper
-│       └── date.cs         ← date setter
+│       ├── date.cs         ← date setter
+│       └── logconf.cs      ← log config (conf/.etsu)
 ├── bin/
 │   └── etsu.exe            ← compiled binary
-├── logs/                   ← clean_*.log, date_*.log (10 kept each)
+├── conf/
+│   └── .etsu               ← per-subtool log controls
+├── logs/                   ← clean_*.log, date_*.log, read_*.log (logCount kept each)
 └── docs/
     └── etsu.md
 ```

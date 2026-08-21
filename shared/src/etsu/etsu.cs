@@ -17,6 +17,7 @@ class Etsu
         BaseDir = Path.GetDirectoryName(typeof(Etsu).Assembly.Location);
         LogDir = Path.GetFullPath(Path.Combine(BaseDir, "..", "logs"));
         Directory.CreateDirectory(LogDir);
+        LogConf.Load(Path.GetFullPath(Path.Combine(BaseDir, "..", "conf", ".etsu")));
 
         if (!FindExiftool())
         {
@@ -110,6 +111,8 @@ class Etsu
 
     public static void WriteLog(string prefix, string outcome, List<string> lines)
     {
+        if (!LogConf.Enabled(prefix)) return;
+
         string ts = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         string logFile = Path.Combine(LogDir, prefix + "_" + ts + ".log");
         using (var w = new StreamWriter(logFile, false))
@@ -124,7 +127,8 @@ class Etsu
 
         var all = new List<string>(Directory.GetFiles(LogDir, prefix + "_*.log"));
         all.Sort();
-        while (all.Count > 10)
+        int keep = LogConf.Count(prefix);
+        while (all.Count > keep)
         {
             File.Delete(all[0]);
             all.RemoveAt(0);

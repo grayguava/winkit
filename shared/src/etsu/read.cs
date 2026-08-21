@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
 
@@ -31,11 +32,16 @@ class ReadTool
         Etsu.WriteSep();
 
         string output = Etsu.RunTool(Etsu.ExifPath, "\"" + file + "\"");
+        var logLines = new List<string>();
         foreach (string ln in output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
             Console.WriteLine("  " + ln);
+            logLines.Add(ln);
+        }
 
         Console.WriteLine();
         Etsu.WriteSep();
+        Etsu.WriteLog("read", "SUCCESS", logLines);
         return Etsu.WaitExit();
     }
 }

@@ -34,7 +34,7 @@ Each tool is fully independent – removing one .exe and its config file won't a
 
 #### [etsu](docs/etsu.md) (**e**xif**t**ool **s**imple **u**se)
 
-- **Source:** `src/etsu/etsu.cs, read.cs, clean.cs, date.cs`
+- **Source:** `src/etsu/etsu.cs, read.cs, clean.cs, date.cs, logconf.cs`
 - **Dependencies:** `System.Windows.Forms` (native file pickers) + external exiftool
 - **Description:** Reads all metadata from one file, strips EXIF/IPTC/XMP from several (rollback-safe), or sets EXIF dates and filesystem timestamps.
 

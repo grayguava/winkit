@@ -1,0 +1,15 @@
+# Per-subtool log controls for etsu
+# log=true|false -> write logs/<tool>_<timestamp>.log when that subtool runs
+# logCount=N -> keep the N latest logs per subtool
+
+[clean]
+log=true
+logCount=10
+
+[date]
+log=true
+logCount=10
+
+[read]
+log=false
+logCount=10
