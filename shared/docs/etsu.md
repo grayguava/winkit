@@ -71,7 +71,7 @@ logCount=10
 
 | Key | Default | Description |
 |---|---|---|
-| `log` | `true` (`false` for `read`) | Write `logs/<tool>_<timestamp>.log` when that subtool runs. |
+| `log` | `true` (`false` for `read`) | Write `logs/etsu/<tool>_<timestamp>.log` when that subtool runs. |
 | `logCount` | `10` | Keep the N latest logs per subtool; older ones are deleted after each write. |
 
 Missing file or section falls back to these defaults.
@@ -108,7 +108,8 @@ shared/
 │   └── etsu.exe            ← compiled binary
 ├── conf/
 │   └── .etsu               ← per-subtool log controls
-├── logs/                   ← clean_*.log, date_*.log, read_*.log (logCount kept each)
+├── logs/
+│   └── etsu/               ← clean_*.log, date_*.log, read_*.log (logCount kept each)
 └── docs/
     └── etsu.md
 ```

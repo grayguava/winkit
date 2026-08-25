@@ -15,7 +15,7 @@ class Etsu
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         BaseDir = Path.GetDirectoryName(typeof(Etsu).Assembly.Location);
-        LogDir = Path.GetFullPath(Path.Combine(BaseDir, "..", "logs"));
+        LogDir = Path.GetFullPath(Path.Combine(BaseDir, "..", "logs", "etsu"));
         Directory.CreateDirectory(LogDir);
         LogConf.Load(Path.GetFullPath(Path.Combine(BaseDir, "..", "conf", ".etsu")));
 
