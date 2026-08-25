@@ -59,7 +59,12 @@ static class BatteryReader
             {
                 foreach (ManagementObject o in searcher.Get())
                 {
-                    data.Remaining = Convert.ToInt32(o["RemainingCapacity"]);
+                    object rc = o["RemainingCapacity"];
+                    if (rc != null)
+                    {
+                        int remaining = Convert.ToInt32(rc);
+                        if (remaining > 0) data.Remaining = remaining;
+                    }
                     data.Voltage = Convert.ToInt32(o["Voltage"]);
                     data.ChargeRate = Convert.ToInt32(o["ChargeRate"]);
                     data.DischargeRate = Convert.ToInt32(o["DischargeRate"]);

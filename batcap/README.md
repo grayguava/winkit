@@ -12,6 +12,8 @@ To know why I built this tool, read `STORY.md`. For the config format, read `con
 
 Run via Task Scheduler (daily or weekly trigger) or double-click to log silently. No console window is shown.
 
+Exit codes: `0` on success, `1` when every enabled WMI query returned no data, another instance holds the run mutex, or an unexpected error occurs (the reason is also written to the log as an `ERROR` line). A named mutex (`Local\batcap`) serializes concurrent runs so `.cyclestate` updates never interleave.
+
 Appends one line to `logs/batcap.log`:
 
 ```
@@ -64,6 +66,8 @@ One class failing (e.g. a flaky provider) doesn't block the others - each failur
 
 Appends one line to `logs/batcap.log` with a timestamp and the enabled fields. Append-only - never rewrites or prunes history. Old lines are left untouched.
 
+Failures append an `ERROR ...` line instead of a data line and exit 1. `.cyclestate` is written atomically (temp file + replace, leaving a transient `.tmp`/`.bak` pair), so a crash mid-write can't truncate the running discharge total.
+
 ---
 
 ### Design decisions
@@ -106,7 +110,7 @@ batcap/
 
 ### Known limitations
 
-- Silent by design - no console output, no notification on failure.
+- Silent by design - no console output or notifications; failures surface as `ERROR` lines in the log and a non-zero exit code.
 - Design capacity is config-derived, not auto-detected - must be set correctly for accurate health percentages.
 - No retention policy - the log grows until you delete it.
 - Cycle count and battery temperature are not supported - this battery's firmware doesn't expose them (see `config.md`).

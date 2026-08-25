@@ -13,6 +13,8 @@ logs/
 
 # Runtime state
 *.cyclestate
+*.cyclestate.bak
+*.cyclestate.tmp
 
 # KDBX snapshot copies
 kdbx-backup/databaseCopies/

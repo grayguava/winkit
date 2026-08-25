@@ -31,7 +31,9 @@ omitted from the line entirely, and its WMI class is not queried at all
 `bin/.cyclestate` holds the running discharge total and the last-seen
 `Remaining` value. It is read at the start of each run and updated at the
 end, and keeps accumulating **regardless** of the `EquivCycles` toggle - so
-toggling the field off and on later never loses history.
+toggling the field off and on later never loses history. Writes are atomic:
+a `.tmp` file is written first, then swapped in via `File.Replace` (which
+also leaves a `.bak`; a crash mid-write can't truncate the totals).
 
 ```
 LastRemaining=21870
