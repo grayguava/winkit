@@ -51,6 +51,8 @@ A target is a place an image can be written to. Three exist:
 
 Apply order is Desktop → Terminal → Registry: the visible change lands first, persistence last.
 
+The Terminal target edits the existing `backgroundImage` value only - if that key isn't already in `settings.json`, nothing is written and the miss is recorded in `bin\logs\fail.log`. Each successful edit saves the previous file to `settings.json.bak` (next to it), and the swap itself is atomic, so a crash mid-write can't corrupt your Terminal config.
+
 #### Pool modes
 
 - **`random`** - each enabled target gets a *different* image from the pool.
@@ -128,7 +130,7 @@ The daemon only ever schedules files with a known extension (`jpg`, `jpeg`, `png
 - **Distinct-per-target random:** `random` mode advances the queue once per enabled target, so desktop, terminal, and registry get three different images instead of one repeated.
 - **Live config reload:** re-reading a pool's section on each press means editing `.pools` takes effect immediately - no daemon restart for a mode change.
 - **Desktop first:** applying the desktop before the terminal/registry keeps the visible change instant; the slower writes finish right after.
-- **Silent operation:** a hotkey-triggered tool shouldn't print or pop boxes. Failures surface once at startup as a dialog, then it runs quietly.
+- **Silent operation:** a hotkey-triggered tool shouldn't print or pop boxes. Config problems surface once at startup as a dialog; runtime failures append to `bin\logs\fail.log` and the daemon keeps running.
 
 ---
 
@@ -155,7 +157,8 @@ wallswitch/
 │   │       └── regKey.cs       ← registry persistence for reboots
 │   └── platform/
 │       ├── config.cs           ← INI parse + .targets/.pools readers
-│       └── hotkey.cs           ← hidden form + RegisterHotKey per pool
+│       ├── hotkey.cs           ← hidden form + RegisterHotKey per pool
+│       └── faillog.cs          ← append-only failure log (bin/logs/fail.log)
 ├── bin/
 │   ├── wallswitch.exe         ← compiled binary
 │   ├── .pools                 ← pool definitions (dir, hotkey, mode)
@@ -170,7 +173,7 @@ wallswitch/
 
 ### Known limitations
 
-- **No logging** - no output on success or failure; diagnosing requires a debugger or checking the state files.
+- **Minimal logging** - successes print nothing and aren't recorded; runtime failures append to `bin\logs\fail.log` (created on first failure).
 - **Single-monitor wallpaper** - the image spans the virtual desktop. Per-monitor wallpapers need a different tool.
 - **No format conversion** - Windows must natively render a scanned format (`jpg`, `jpeg`, `png`, `bmp`, `webp`). `webp` renders natively on Windows 11; Windows 10 needs the codec pack.
 - **No exclusions** - all images in a pool folder are included.

@@ -19,12 +19,18 @@ static class Daemon
         Warnings.Clear();
 
         var targetSections = TargetsConfig.Load(Path.Combine(exeDir, ".targets"));
-        TargetRegistry.Load(targetSections);
+        TargetRegistry.Load(targetSections, exeDir);
         targetNames = TargetRegistry.EnabledNames;
 
         var result = new List<Pool>();
         foreach (var cfg in PoolsConfig.Load(Path.Combine(exeDir, ".pools")))
         {
+            if (!IsValidPoolName(cfg.Name))
+            {
+                Warnings.Add("Pool '" + cfg.Name + "' has an invalid name - disabled.");
+                continue;
+            }
+
             if (cfg.Key.Length == 0)
             {
                 Warnings.Add("Pool '" + cfg.Name + "' has empty PoolKey - disabled.");
@@ -37,6 +43,8 @@ static class Daemon
                 Warnings.Add("Pool '" + cfg.Name + "' has invalid PoolKey '" + cfg.Key + "' - disabled.");
                 continue;
             }
+
+            cfg.Dir = NormalizePath(cfg.Dir);
 
             if (!Directory.Exists(cfg.Dir))
             {
@@ -88,14 +96,39 @@ static class Daemon
 
     static void RefreshPool(Pool pool)
     {
-        foreach (var cfg in PoolsConfig.Load(Path.Combine(exeDir, ".pools")))
+        List<PoolConfig> configs;
+        try
+        {
+            configs = PoolsConfig.Load(Path.Combine(exeDir, ".pools"));
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (var cfg in configs)
         {
             if (string.Equals(cfg.Name, pool.Name, System.StringComparison.OrdinalIgnoreCase))
             {
+                if (!Directory.Exists(cfg.Dir)) break;
                 pool.Config = cfg;
                 pool.State.PoolDir = cfg.Dir;
                 break;
             }
         }
+    }
+
+    static string NormalizePath(string p)
+    {
+        if (string.IsNullOrEmpty(p) || Path.IsPathRooted(p)) return p;
+        return Path.GetFullPath(Path.Combine(exeDir, p));
+    }
+
+    static bool IsValidPoolName(string name)
+    {
+        if (name.Length == 0 || name == "." || name == "..") return false;
+        foreach (char c in Path.GetInvalidFileNameChars())
+            if (name.IndexOf(c) >= 0) return false;
+        return true;
     }
 }

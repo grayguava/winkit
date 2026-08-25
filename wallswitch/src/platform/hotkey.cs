@@ -10,6 +10,8 @@ class HotkeyForm : Form
 
     readonly List<Registration> registrations = new List<Registration>();
 
+    public readonly List<string> RegistrationFailures = new List<string>();
+
     public HotkeyForm()
     {
         FormBorderStyle = FormBorderStyle.FixedToolWindow;
@@ -31,8 +33,7 @@ class HotkeyForm : Form
         {
             bool ok = RegisterHotKey(Handle, reg.Id, reg.Mods | MOD_NOREPEAT, reg.Vk);
             if (!ok)
-                Console.Error.WriteLine("wallswitch: unable to register hotkey id=" + reg.Id
-                    + " (may be in use).");
+                RegistrationFailures.Add("Hotkey id=" + reg.Id + " could not be registered (may be in use).");
         }
     }
 
@@ -46,7 +47,16 @@ class HotkeyForm : Form
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == WM_HOTKEY)
-            Daemon.HandleHotkey((int)m.WParam);
+        {
+            try
+            {
+                Daemon.HandleHotkey((int)m.WParam);
+            }
+            catch (Exception ex)
+            {
+                FailLog.Append(ex.ToString());
+            }
+        }
         base.WndProc(ref m);
     }
 

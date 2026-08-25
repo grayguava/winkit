@@ -18,6 +18,7 @@ class PoolState
         if (!File.Exists(path)) return s;
         try
         {
+            if (new FileInfo(path).Length > 8 * 1024 * 1024) return s;
             string section = "";
             foreach (string raw in File.ReadAllLines(path, Encoding.UTF8))
             {
@@ -25,12 +26,22 @@ class PoolState
                 if (line.Length == 0) continue;
                 if (line == "queue:") { section = "queue"; continue; }
                 if (line == "shown:") { section = "shown"; continue; }
+                if (IsUnsafeEntry(line)) continue;
                 if (section == "queue") s.Queue.Add(line);
                 else if (section == "shown") s.Shown.Add(line);
             }
         }
         catch { }
         return s;
+    }
+
+    static bool IsUnsafeEntry(string line)
+    {
+        if (Path.IsPathRooted(line)) return true;
+        if (line == "." || line == "..") return true;
+        if (line.StartsWith(@"..\") || line.StartsWith("../")) return true;
+        if (line.Contains(@"\..\") || line.Contains("/../")) return true;
+        return false;
     }
 
     public void Save()
@@ -41,7 +52,12 @@ class PoolState
         sb.AppendLine();
         sb.AppendLine("shown:");
         foreach (var f in Shown) sb.AppendLine(f);
-        File.WriteAllText(FilePath, sb.ToString(), Encoding.UTF8);
+        string tmp = FilePath + ".tmp";
+        File.WriteAllText(tmp, sb.ToString(), Encoding.UTF8);
+        if (File.Exists(FilePath))
+            File.Replace(tmp, FilePath, null);
+        else
+            File.Move(tmp, FilePath);
     }
 
     public string Next()
@@ -84,8 +100,10 @@ class PoolState
 
     string MakeRelative(string full)
     {
-        return full.StartsWith(PoolDir, StringComparison.OrdinalIgnoreCase)
-            ? full.Substring(PoolDir.Length).TrimStart('\\', '/')
+        string prefix = PoolDir;
+        if (!prefix.EndsWith("\\") && !prefix.EndsWith("/")) prefix += "\\";
+        return full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? full.Substring(prefix.Length)
             : full;
     }
 

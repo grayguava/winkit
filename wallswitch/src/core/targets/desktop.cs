@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.InteropServices;
 
 static class Desktop
@@ -8,8 +9,10 @@ static class Desktop
 
     public static void Apply(string imagePath)
     {
-        SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, imagePath,
+        int ok = SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, imagePath,
             SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        if (ok == 0)
+            FailLog.Append("desktop: SystemParametersInfo failed for " + imagePath);
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]

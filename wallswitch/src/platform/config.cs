@@ -16,8 +16,13 @@ static class IniParse
 
             if (line.StartsWith("[") && line.EndsWith("]"))
             {
-                current = new Section(line.Substring(1, line.Length - 2).Trim());
-                result.Add(current);
+                string name = line.Substring(1, line.Length - 2).Trim();
+                current = Find(result, name);
+                if (current == null)
+                {
+                    current = new Section(name);
+                    result.Add(current);
+                }
                 continue;
             }
 

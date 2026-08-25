@@ -9,6 +9,18 @@ static class Program
     [STAThread]
     static void Main()
     {
+        try
+        {
+            Run();
+        }
+        catch (Exception ex)
+        {
+            FailLog.Append(ex.ToString());
+        }
+    }
+
+    static void Run()
+    {
         bool createdNew;
         using (var mutex = new Mutex(true, "Wallswitch", out createdNew))
         {
@@ -33,6 +45,14 @@ static class Program
 
             var form = new HotkeyForm();
             Daemon.RegisterHotkeys(form, readyPools);
+
+            IntPtr unused = form.Handle;
+
+            foreach (string failure in form.RegistrationFailures.ToArray())
+                FailLog.Append(failure);
+            if (form.RegistrationFailures.Count > 0)
+                MessageBox.Show(string.Join("\n", form.RegistrationFailures.ToArray()), "wallswitch",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
             Application.EnableVisualStyles();
             Application.Run(form);

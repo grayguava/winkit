@@ -10,6 +10,8 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
+if not exist bin\ md bin
+
 rem compile all src\*.cs recursively (fsFind should catch our subfolders)
 "%CSC%" /nologo /optimize+ /reference:System.Windows.Forms.dll /target:winexe /out:bin\wallswitch.exe /recurse:src\*.cs
 
