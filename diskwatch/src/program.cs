@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
+using diskwatch.config;
 
 class Program
 {
@@ -16,11 +18,11 @@ class Program
     static int Main(string[] args)
     {
         bool createdNew;
-        _mutex = new Mutex(true, "diskwatch", out createdNew);
+        _mutex = new Mutex(true, @"Global\diskwatch", out createdNew);
         if (!createdNew)
         {
             Console.Error.WriteLine("diskwatch is already running.");
-            return 1;
+            return 3;
         }
         try
         {
@@ -41,29 +43,35 @@ class Program
         string runsDir = Path.Combine(runDir, "runs");
 
         var commands = CommandConfig.Load(Path.Combine(baseDir, ".cmds"));
+        if (commands.Count == 0)
+        {
+            Console.Error.WriteLine("No valid commands configured in .cmds.");
+            return 2;
+        }
+
         var smartAttrs = SmartAttrConfig.Load(Path.Combine(baseDir, ".smart"));
         SettingsConfig.Load(Path.Combine(baseDir, ".conf"));
 
         foreach (var cmd in commands)
         {
             string output;
-            int code = CommandRunner.Run(cmd.Exe, cmd.Args, out output);
+            int code = CommandRunner.Run(cmd.Exe, cmd.Args,
+                SettingsConfig.CommandTimeoutMinutes * 60 * 1000, out output);
             SaveRaw(runsDir, cmd.Name, code, output);
         }
 
-        var prev = LoadPrevState(logsDir, runDir);
+        if (Directory.Exists(runsDir) && Directory.GetFiles(runsDir, "*.json").Length == 0)
+            Console.Error.WriteLine("Warning: no command produced output this run.");
+
+        bool prevUnreadable;
+        MasterState prev = LoadPrevState(logsDir, runDir, out prevUnreadable);
         var curr = MasterStateManager.Build(runsDir, smartAttrs);
         MasterStateManager.Save(Path.Combine(runDir, "result.json"), curr);
-
-        var dirs = new List<string>(Directory.GetDirectories(logsDir));
-        dirs.Sort();
-        while (dirs.Count > SettingsConfig.LogRetention)
-        {
-            Directory.Delete(dirs[0], true);
-            dirs.RemoveAt(0);
-        }
+        PruneLogs(logsDir);
 
         var changes = MasterStateManager.Diff(prev, curr);
+        if (prevUnreadable)
+            changes.Insert(0, "baseline: previous report(s) could not be read");
 
         foreach (var kv in curr.Drives)
         {
@@ -104,15 +112,43 @@ class Program
             "{\"ExitCode\":" + exitCode + ",\"Output\":" + MasterStateManager.EncodeJson(output ?? "") + "}");
     }
 
-    static MasterState LoadPrevState(string logsDir, string currentDir)
+    static MasterState LoadPrevState(string logsDir, string currentDir,
+        out bool unreadable)
     {
+        unreadable = false;
+        bool sawPrev = false;
         var dirs = new List<string>(Directory.GetDirectories(logsDir));
         dirs.Sort();
         for (int i = dirs.Count - 1; i >= 0; i--)
         {
-            if (dirs[i] != currentDir)
-                return MasterStateManager.Load(Path.Combine(dirs[i], "result.json"));
+            if (dirs[i] == currentDir) continue;
+            sawPrev = true;
+            MasterState s = MasterStateManager.Load(Path.Combine(dirs[i], "result.json"));
+            if (s != null) return s;
         }
+        unreadable = sawPrev;
         return null;
+    }
+
+    static void PruneLogs(string logsDir)
+    {
+        var valid = new Regex(@"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$");
+        var dirs = new List<string>();
+        foreach (string d in Directory.GetDirectories(logsDir))
+            if (valid.IsMatch(Path.GetFileName(d)))
+                dirs.Add(d);
+        dirs.Sort();
+        while (dirs.Count > SettingsConfig.LogRetention)
+        {
+            string oldest = dirs[0];
+            dirs.RemoveAt(0);
+            try
+            {
+                var info = new DirectoryInfo(oldest);
+                if ((info.Attributes & FileAttributes.ReparsePoint) == 0)
+                    Directory.Delete(oldest, true);
+            }
+            catch { }
+        }
     }
 }

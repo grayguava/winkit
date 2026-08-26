@@ -48,6 +48,9 @@ public static partial class MasterStateManager
             if (pd.BadSectorsKb != cd.BadSectorsKb)
                 changes.Add(kv.Key + ": bad sectors " + pd.BadSectorsKb + " \u2192 " + cd.BadSectorsKb);
         }
+        foreach (var kv in prev.Drives)
+            if (!curr.Drives.ContainsKey(kv.Key))
+                changes.Add(kv.Key + ": drive disappeared");
 
         if (prev.Smart != null && curr.Smart != null)
         {
@@ -83,9 +86,78 @@ public static partial class MasterStateManager
                     }
                 }
             }
+            foreach (var kv in prev.Smart)
+                if (!curr.Smart.ContainsKey(kv.Key))
+                    changes.Add(kv.Key + ": smart device disappeared");
         }
 
         return changes;
+    }
+
+    static string EscapeJsonString(string s)
+    {
+        if (s == null) return "null";
+        var sb = new System.Text.StringBuilder();
+        sb.Append('"');
+        foreach (char c in s)
+        {
+            if (c == '"') sb.Append("\\\"");
+            else if (c == '\\') sb.Append("\\\\");
+            else if (c == '\r') sb.Append("\\r");
+            else if (c == '\n') sb.Append("\\n");
+            else if (c == '\t') sb.Append("\\t");
+            else if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+            else sb.Append(c);
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    static long AsLong(object v, long fallback)
+    {
+        if (v is long) return (long)v;
+        if (v is int) return (int)v;
+        if (v is double)
+        {
+            try { return Convert.ToInt64((double)v); } catch { }
+        }
+        if (v is decimal)
+        {
+            try { return Convert.ToInt64((decimal)v); } catch { }
+        }
+        if (v is string)
+        {
+            long r;
+            if (long.TryParse((string)v, out r)) return r;
+        }
+        return fallback;
+    }
+
+    static int AsInt(object v, int fallback)
+    {
+        if (v is int) return (int)v;
+        if (v is long) return (int)(long)v;
+        if (v is double)
+        {
+            try { return Convert.ToInt32((double)v); } catch { }
+        }
+        if (v is decimal)
+        {
+            try { return Convert.ToInt32((decimal)v); } catch { }
+        }
+        if (v is string)
+        {
+            int r;
+            if (int.TryParse((string)v, out r)) return r;
+        }
+        return fallback;
+    }
+
+    static string AsString(Dictionary<string, object> d, string key)
+    {
+        object v;
+        if (d.TryGetValue(key, out v) && v is string) return (string)v;
+        return null;
     }
 
     public static string EncodeJson(string s)
@@ -96,6 +168,10 @@ public static partial class MasterStateManager
         {
             if (c == '"') sb.Append("\\\"");
             else if (c == '\\') sb.Append("\\\\");
+            else if (c == '\r') sb.Append("\\r");
+            else if (c == '\n') sb.Append("\\n");
+            else if (c == '\t') sb.Append("\\t");
+            else if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
             else sb.Append(c);
         }
         sb.Append('"');
@@ -122,8 +198,9 @@ public static partial class MasterStateManager
     {
         var s = new MasterState();
         if (d == null) return s;
-        s.Timestamp = d.ContainsKey("timestamp") ? (string)d["timestamp"] : null;
-        if (d.ContainsKey("drives"))        {
+        s.Timestamp = AsString(d, "timestamp");
+        if (d.ContainsKey("drives"))
+        {
             var dd = d["drives"] as Dictionary<string, object>;
             if (dd != null)
             {
@@ -150,8 +227,8 @@ public static partial class MasterStateManager
         var ds = new DriveState();
         if (d == null) return ds;
         if (d.ContainsKey("dirty")) ds.Dirty = d["dirty"] as bool?;
-        ds.Filesystem = d.ContainsKey("filesystem") ? (string)d["filesystem"] : null;
-        if (d.ContainsKey("badSectorsKb")) ds.BadSectorsKb = Convert.ToInt64(d["badSectorsKb"]);
+        ds.Filesystem = AsString(d, "filesystem");
+        if (d.ContainsKey("badSectorsKb")) ds.BadSectorsKb = AsLong(d["badSectorsKb"], 0);
         return ds;
     }
 
@@ -159,11 +236,11 @@ public static partial class MasterStateManager
     {
         var ss = new SmartState();
         if (d == null) return ss;
-        ss.Model = d.ContainsKey("model") ? (string)d["model"] : null;
-        ss.Serial = d.ContainsKey("serial") ? (string)d["serial"] : null;
-        ss.Firmware = d.ContainsKey("firmware") ? (string)d["firmware"] : null;
-        ss.Health = d.ContainsKey("health") ? (string)d["health"] : null;
-        if (d.ContainsKey("endurance")) ss.Endurance = Convert.ToInt32(d["endurance"]);
+        ss.Model = AsString(d, "model");
+        ss.Serial = AsString(d, "serial");
+        ss.Firmware = AsString(d, "firmware");
+        ss.Health = AsString(d, "health");
+        if (d.ContainsKey("endurance")) ss.Endurance = AsInt(d["endurance"], -1);
         if (d.ContainsKey("important"))
         {
             var ad = d["important"] as Dictionary<string, object>;
@@ -171,7 +248,11 @@ public static partial class MasterStateManager
             {
                 ss.ImportantAttrs = new Dictionary<string, long>();
                 foreach (var kv in ad)
-                    ss.ImportantAttrs[kv.Key] = Convert.ToInt64(kv.Value);
+                {
+                    long v = AsLong(kv.Value, long.MinValue);
+                    if (v != long.MinValue)
+                        ss.ImportantAttrs[kv.Key] = v;
+                }
             }
         }
         if (d.ContainsKey("extras"))
@@ -181,7 +262,11 @@ public static partial class MasterStateManager
             {
                 ss.ExtraAttrs = new Dictionary<string, long>();
                 foreach (var kv in ad)
-                    ss.ExtraAttrs[kv.Key] = Convert.ToInt64(kv.Value);
+                {
+                    long v = AsLong(kv.Value, long.MinValue);
+                    if (v != long.MinValue)
+                        ss.ExtraAttrs[kv.Key] = v;
+                }
             }
         }
         return ss;
@@ -191,7 +276,7 @@ public static partial class MasterStateManager
     {
         var sb = new System.Text.StringBuilder();
         sb.Append("{\r\n");
-        Field(sb, "timestamp", s.Timestamp, 1); sb.Append(",\r\n");
+        sb.Append("  \"timestamp\": " + EscapeJsonString(s.Timestamp) + ",\r\n");
         sb.Append("  \"drives\": {\r\n");
         bool first = true;
         if (s.Drives != null)
@@ -200,10 +285,13 @@ public static partial class MasterStateManager
             {
                 if (!first) sb.Append(",\r\n");
                 first = false;
-                sb.Append("    \"" + kv.Key + "\": {\r\n");
-                Field(sb, "dirty", kv.Value.Dirty, 3); sb.Append(",\r\n");
-                Field(sb, "filesystem", kv.Value.Filesystem, 3); sb.Append(",\r\n");
-                Field(sb, "badSectorsKb", kv.Value.BadSectorsKb, 3); sb.Append("\r\n");
+                sb.Append("    " + EscapeJsonString(kv.Key) + ": {\r\n");
+                sb.Append("      \"dirty\": ");
+                if (kv.Value.Dirty == null) sb.Append("null");
+                else sb.Append(((bool)kv.Value.Dirty) ? "true" : "false");
+                sb.Append(",\r\n");
+                sb.Append("      \"filesystem\": " + EscapeJsonString(kv.Value.Filesystem) + ",\r\n");
+                sb.Append("      \"badSectorsKb\": " + kv.Value.BadSectorsKb + "\r\n");
                 sb.Append("    }");
             }
         }
@@ -216,12 +304,12 @@ public static partial class MasterStateManager
             {
                 if (!first) sb.Append(",\r\n");
                 first = false;
-                sb.Append("    \"" + kv.Key + "\": {\r\n");
-                Field(sb, "model", kv.Value.Model, 3); sb.Append(",\r\n");
-                Field(sb, "serial", kv.Value.Serial, 3); sb.Append(",\r\n");
-                Field(sb, "firmware", kv.Value.Firmware, 3); sb.Append(",\r\n");
-                Field(sb, "health", kv.Value.Health, 3); sb.Append(",\r\n");
-                Field(sb, "endurance", kv.Value.Endurance, 3); sb.Append(",\r\n");
+                sb.Append("    " + EscapeJsonString(kv.Key) + ": {\r\n");
+                sb.Append("      \"model\": " + EscapeJsonString(kv.Value.Model) + ",\r\n");
+                sb.Append("      \"serial\": " + EscapeJsonString(kv.Value.Serial) + ",\r\n");
+                sb.Append("      \"firmware\": " + EscapeJsonString(kv.Value.Firmware) + ",\r\n");
+                sb.Append("      \"health\": " + EscapeJsonString(kv.Value.Health) + ",\r\n");
+                sb.Append("      \"endurance\": " + kv.Value.Endurance + ",\r\n");
 
                 sb.Append("      \"important\": {\r\n");
                 bool afirst = true;
@@ -231,7 +319,7 @@ public static partial class MasterStateManager
                     {
                         if (!afirst) sb.Append(",\r\n");
                         afirst = false;
-                        sb.Append("        \"" + akv.Key + "\": " + akv.Value);
+                        sb.Append("        " + EscapeJsonString(akv.Key) + ": " + akv.Value);
                     }
                 }
                 sb.Append("\r\n      },\r\n");
@@ -244,7 +332,7 @@ public static partial class MasterStateManager
                     {
                         if (!afirst) sb.Append(",\r\n");
                         afirst = false;
-                        sb.Append("        \"" + akv.Key + "\": " + akv.Value);
+                        sb.Append("        " + EscapeJsonString(akv.Key) + ": " + akv.Value);
                     }
                 }
                 sb.Append("\r\n      }\r\n");
@@ -254,28 +342,5 @@ public static partial class MasterStateManager
         sb.Append("\r\n  }\r\n");
         sb.Append("}\r\n");
         return sb.ToString();
-    }
-
-    static void Field(System.Text.StringBuilder sb, string name, object val, int indent)
-    {
-        string pad = new string(' ', indent * 2);
-        sb.Append(pad + "\"" + name + "\": ");
-        if (val == null) sb.Append("null");
-        else if (val is bool) sb.Append(((bool)val) ? "true" : "false");
-        else if (val is long || val is int) sb.Append(val.ToString());
-        else
-        {
-            sb.Append('"');
-            foreach (char c in val.ToString())
-            {
-                if (c == '"') sb.Append("\\\"");
-                else if (c == '\\') sb.Append("\\\\");
-                else if (c == '\r') sb.Append("\\r");
-                else if (c == '\n') sb.Append("\\n");
-                else if (c == '\t') sb.Append("\\t");
-                else sb.Append(c);
-            }
-            sb.Append('"');
-        }
     }
 }

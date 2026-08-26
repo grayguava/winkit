@@ -26,8 +26,9 @@ public static partial class MasterStateManager
         m = Regex.Match(o, @"(\d+)\s+---\s+Percentage Used Endurance Indicator");
         if (m.Success)
         {
-            int used = int.Parse(m.Groups[1].Value);
-            ss.Endurance = 100 - used;
+            int used;
+            if (int.TryParse(m.Groups[1].Value, out used))
+                ss.Endurance = 100 - used;
         }
         int importantLimit = smartAttrs.Count < 5 ? smartAttrs.Count : 5;
         for (int i = 0; i < smartAttrs.Count; i++)
@@ -38,11 +39,14 @@ public static partial class MasterStateManager
                 RegexOptions.Multiline);
             if (m.Success)
             {
-                long val = long.Parse(m.Groups[1].Value);
-                if (i < importantLimit)
-                    ss.ImportantAttrs[attr.Name] = val;
-                else
-                    ss.ExtraAttrs[attr.Name] = val;
+                long val;
+                if (long.TryParse(m.Groups[1].Value, out val))
+                {
+                    if (i < importantLimit)
+                        ss.ImportantAttrs[attr.Name] = val;
+                    else
+                        ss.ExtraAttrs[attr.Name] = val;
+                }
             }
         }
         return ss;

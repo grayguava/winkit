@@ -22,8 +22,10 @@ Admin rights are required - `fsutil`, `chkdsk`, and full `smartctl` data all nee
 |---|---|
 | 0 | Healthy - no changes since last check |
 | 1 | Something changed (important attrs only) |
+| 2 | Configuration/execution error (no commands configured, no output produced) |
+| 3 | Another instance is already running |
 
-A named mutex prevents concurrent instances - a second launch prints `diskwatch is already running.` and exits.
+A named mutex (`Global\diskwatch`) prevents concurrent instances - a second launch prints a message and exits with code 3.
 
 ---
 
@@ -37,13 +39,13 @@ A named mutex prevents concurrent instances - a second launch prints `diskwatch 
 | Filesystem scan | `chkdsk C: /scan` | Read-only scan of filesystem metadata; access denied, clean, problems, or bad sector count |
 | SMART | `smartctl -x /dev/sda` | Drive identity, overall health, endurance, watched attributes |
 
-The exact commands come from `bin/.cmds`, grouped by section. Only `fsutil`, `chkdsk`, and `smartctl` are accepted as executables; argument strings are sanitized against shell metacharacters. Invalid entries are silently skipped.
+The exact commands come from `bin/.cmds`, grouped by section. Only `fsutil`, `chkdsk`, and `smartctl` are accepted as executables; argument strings are sanitized against shell metacharacters. Mutating flags (e.g. `chkdsk /f`, `fsutil dirty set`, `smartctl -t`) are rejected; diskwatch never repairs, cleans, or modifies the system. Executables are resolved to absolute paths at startup (`fsutil`/`chkdsk` pinned to `%SystemRoot%\System32`; `smartctl` found via `PATH`). A per-command timeout (`commandTimeoutMinutes` in `.conf`, default 60) kills hung processes and reports them as timed out. Invalid entries are silently skipped.
 
 SMART attributes to track come from `bin/.smart` in `ID=Name` format. The first 5 are **important** (shown in the popup's Critical Health section, trigger warnings on change); the rest are **extras** (informational only).
 
 #### State and comparison
 
-Every run saves parsed state to `logs/<timestamp>/result.json`. The previous run's `result.json` is loaded as the comparison baseline. The following differences trigger a change (exit 1 + warning popup):
+Every run saves parsed state to `logs/<timestamp>/result.json`. Previous run directories are scanned backward (newest first) until a parseable baseline is found. This handles corrupted intermediate baselines gracefully. The following differences trigger a change (exit 1 + warning popup):
 
 - Dirty bit toggled
 - Filesystem status changed
@@ -51,14 +53,15 @@ Every run saves parsed state to `logs/<timestamp>/result.json`. The previous run
 - SMART health changed
 - SMART endurance changed
 - Any important SMART attribute changed
+- A previously present drive or SMART device disappeared
 
-Extra attribute changes are tracked but never trigger a warning. If no previous state exists (first run), no changes are reported.
+Extra attribute changes are tracked but never trigger a warning. If a previous baseline exists but none can be read, the baseline-unreadable condition is reported as an important change. If no previous run directories exist at all (first run), no changes are reported.
 
 #### Raw output logging
 
 Every run also saves the raw command output to `logs/<timestamp>/runs/` (compact JSON per command). If the parser ever misinterprets a tool's output, the raw output is still there for manual inspection.
 
-Only the `logRetention` most recent timestamped run directories are kept (configurable in `.conf`, default 5); older runs are pruned on each execution.
+Only the `logRetention` most recent timestamped run directories are kept (configurable in `.conf`, default 5, minimum 1); older runs are pruned on each execution. Non-timestamped directories and symlinks under `logs/` are never pruned.
 
 #### Popup
 
@@ -104,6 +107,8 @@ smartctl -x /dev/sda
 warnOnly=false
 # logRetention=N -> keep the N latest scan log folders, delete older ones
 logRetention=5
+# commandTimeoutMinutes=N -> kill commands that run longer than N minutes (default 60)
+commandTimeoutMinutes=60
 ```
 
 ---
@@ -167,3 +172,5 @@ diskwatch/
 - **smartctl optional but manual** - install and configure it in `.cmds` if you want SMART checks; not bundled.
 - **No drive discovery** - every drive must be configured in `.cmds` and SMART attrs in `.smart`.
 - **No daemon mode** - use Task Scheduler for periodic runs.
+- **Locale-sensitive parsing** - `chkdsk` and `smartctl` output varies by system locale. The parser handles English output; other locales may cause attributes to be skipped (raw output preserved in `runs/` for manual inspection).
+- **Read-only is enforced, not guaranteed** - mutating flags in `.cmds` are rejected, but the tool cannot prevent a user from editing `.cmds` to add repair commands. The README documents the intended read-only contract.
