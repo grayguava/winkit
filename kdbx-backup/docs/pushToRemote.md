@@ -18,9 +18,9 @@ File: `bin\.push.conf`
 | `sourceDir` | no | `..\databaseCopies` | Local folder to push. Relative paths resolve against the `.exe`'s own folder. |
 | `Remotes` | no | - | Comma-separated rclone remote names. Must match names in `rclone config` exactly (case-sensitive). |
 | `RemotePath` | no | `kdbx-backup` | Folder name to create inside each remote. |
-| `logFile` | no | `..\logs\push.log` | Append-only log. The shipped config uses `..\logs\rclone.log`; both land in the shared `kdbx-backup\logs\` folder. |
+| `RclonePath` | no | `null` (PATH) | Set to `null` to resolve rclone from PATH; or provide a full path to the executable. |
 
-rclone is always launched as `rclone` from PATH - not configurable.
+rclone is resolved from PATH when `RclonePath=null` (the default). Set it to a full path in `.push.conf` if rclone isn't on PATH.
 
 ---
 
@@ -70,15 +70,14 @@ free tier.
 Each remote is a separate `rclone copy` child process, launched via
 `System.Diagnostics.Process`. stdout and stderr are captured
 asynchronously (to avoid deadlocks if both buffers fill simultaneously)
-and written to the log file after the process exits.
+and logged when non-empty after the process exits.
 
 Sequential, not parallel - one remote at a time. Rationale: simplicity
 over speed. A failed remote doesn't block the others; if Google fails,
 Dropbox and Koofr still run. Upload time for small `.kdbx` files is
 negligible, so parallelism buys nothing meaningful.
 
-rclone is passed `--stats-one-line` to produce compact output suitable
-for log files rather than a multi-line progress dashboard.
+rclone is launched without extra flags - keep the command line simple. Any non-empty output (stats, errors) is logged after the process exits.
 
 Exit codes:
 - `0` → logged as `<remote>: OK`
@@ -114,7 +113,7 @@ the "If task is already running → Do not start a new instance" setting.
 - **Settings → If task is already running:** Do not start a new instance
 
 The "Start in" field matters: without it, relative paths in `.push.conf`
-(`sourceDir=..\databaseCopies`, `logFile=..\logs\rclone.log`) would
+(`sourceDir=..\databaseCopies`) would
 resolve against Task Scheduler's own working directory rather than the
 `.exe`'s folder. Setting "Start in" ensures they resolve correctly.
 
@@ -136,7 +135,7 @@ full reasoning - same principle applies here.
 
 ## Log format
 
-Append-only text file. A `[dd-MM-yyyy]` header is written the first time
+Append-only text file at `logs\push.log` (beside `bin\`, hardcoded). A `[dd-MM-yyyy]` header is written the first time
 something is logged on a given day, and each entry is time-only
 (`hh:mm:ss tt`, no repeated date) followed by a colon, a space, and the
 message:
@@ -147,6 +146,10 @@ message:
 06:00:50 PM: Push completed to Koofr
 07:00:00 PM: Pushing to Google
 07:00:44 PM: Push completed to Google
+07:00:44 PM: Google output: Transferred: 12.500 KiB / 12.500 KiB, 100%
+07:01:02 PM: Pushing to Dropbox
+07:01:08 PM: Push failed to Dropbox (exit 1)
+07:01:08 PM: Dropbox output: ERROR : ...temp file ... not found
 ```
 
 Per-remote messages:
@@ -154,10 +157,9 @@ Per-remote messages:
 - `Pushing to <Remote>` - starting the rclone copy for that remote.
 - `Push completed to <Remote>` - rclone exited 0.
 - `Push failed to <Remote> (exit N)` - rclone exited non-zero (e.g. exit 1
-  on a network failure). rclone's own stdout/stderr is not logged - the
-  failure line is the only record.
+  on a network failure). Non-empty stdout/stderr is logged after this line.
 - `Push failed to <Remote> (<message>)` - rclone could not be launched at
-  all (e.g. not on PATH).
+  all (e.g. not on PATH or configured path invalid).
 
 ---
 
@@ -187,4 +189,4 @@ just remove it from the `Remotes=` line.
   all three remotes fail and log errors. Not a problem in practice - the
   next scheduled run will succeed when connectivity is restored, and
   rclone copy is idempotent.
-- **rclone must be on PATH** - the executable path is hardcoded to `rclone`. If rclone is installed elsewhere, add its directory to PATH or use a symlink.
+- **rclone on PATH or configured** - by default rclone is resolved from PATH (`RclonePath=null`). Set `RclonePath=` in `.push.conf` to a full path if rclone isn't on PATH.

@@ -9,7 +9,7 @@ namespace kdbxPushToRemote
     internal static class Program
     {
         private static string SourceDir  = "";
-        private static string RclonePath = "rclone";
+        private static string RclonePath = "null";
         private static List<string> Remotes = new List<string>();
         private static string RemotePath = "kdbx-backup";
         private static string LogFile    = "";
@@ -19,29 +19,74 @@ namespace kdbxPushToRemote
 
         private static void Main()
         {
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-
-            LoadConfig(Path.Combine(baseDir, ".push.conf"), baseDir);
-            Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
-
-            if (Remotes.Count == 0)
+            try
             {
-                Log("No remotes configured. Check Remotes= in .push.conf.");
-                return;
-            }
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-            if (!Directory.Exists(SourceDir))
-            {
-                Log("Source directory not found: " + SourceDir);
-                return;
-            }
+                LoadConfig(Path.Combine(baseDir, ".push.conf"), baseDir);
+                Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
 
-            foreach (string remote in Remotes)
-            {
-                string trimmed = remote.Trim();
-                if (trimmed.Length == 0) continue;
-                SyncRemote(trimmed);
+                if (RclonePath.IndexOf('"') >= 0)
+                    throw new InvalidOperationException("RclonePath contains illegal quote character.");
+
+                if (RclonePath.IndexOf(Path.DirectorySeparatorChar) >= 0
+                    || RclonePath.IndexOf(Path.AltDirectorySeparatorChar) >= 0
+                    || Path.IsPathRooted(RclonePath))
+                {
+                    if (!File.Exists(RclonePath))
+                    {
+                        Log("Rclone not found at configured path: " + RclonePath);
+                        Environment.ExitCode = 1;
+                        return;
+                    }
+                }
+
+                if (Remotes.Count == 0)
+                {
+                    Log("No remotes configured. Check Remotes= in .push.conf.");
+                    return;
+                }
+
+                if (!Directory.Exists(SourceDir))
+                {
+                    Log("Source directory not found: " + SourceDir);
+                    return;
+                }
+
+                foreach (string remote in Remotes)
+                {
+                    string trimmed = remote.Trim();
+                    if (trimmed.Length == 0) continue;
+                    SyncRemote(trimmed);
+                }
             }
+            catch (Exception ex)
+            {
+                TryLog("FATAL: " + ex.GetType().Name + ": " + ex.Message);
+                Environment.ExitCode = 1;
+            }
+        }
+
+        private static void TryLog(string msg)
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string logDir = Path.GetFullPath(Path.Combine(baseDir, "..", "logs"));
+                Directory.CreateDirectory(logDir);
+                string fallbackLog = Path.Combine(logDir, "push.log");
+                string time = DateTime.Now.ToString("hh:mm:ss tt");
+                File.AppendAllText(fallbackLog, time + ": " + msg + Environment.NewLine);
+            }
+            catch { }
+        }
+
+        private static string Q(string s)
+        {
+            s = s.TrimEnd(Path.DirectorySeparatorChar);
+            if (s.IndexOf('"') >= 0)
+                throw new InvalidOperationException("Config value contains illegal quote character: " + s);
+            return "\"" + s + "\"";
         }
 
         private static void LoadConfig(string configPath, string baseDir)
@@ -66,6 +111,15 @@ namespace kdbxPushToRemote
                 ? sourceRaw
                 : Path.GetFullPath(Path.Combine(baseDir, sourceRaw));
 
+            if (values.ContainsKey("RclonePath") && values["RclonePath"].Length > 0)
+            {
+                string raw = values["RclonePath"];
+                if (string.Equals(raw, "null", StringComparison.OrdinalIgnoreCase))
+                    RclonePath = "rclone";
+                else
+                    RclonePath = raw;
+            }
+
             RemotePath = values.ContainsKey("RemotePath") ? values["RemotePath"] : "kdbx-backup";
 
             if (values.ContainsKey("Remotes"))
@@ -77,10 +131,8 @@ namespace kdbxPushToRemote
                 }
             }
 
-            string logRaw = values.ContainsKey("logFile") ? values["logFile"] : "..\\logs\\push.log";
-            LogFile = Path.IsPathRooted(logRaw)
-                ? logRaw
-                : Path.GetFullPath(Path.Combine(baseDir, logRaw));
+            string logDir = Path.GetFullPath(Path.Combine(baseDir, "..", "logs"));
+            LogFile = Path.Combine(logDir, "push.log");
         }
 
         private static void SyncRemote(string remote)
@@ -88,11 +140,16 @@ namespace kdbxPushToRemote
             string destination = remote + ":" + RemotePath;
             Log("Pushing to " + remote);
 
+            var output = new StringBuilder();
+            var sync = new object();
+
             var psi = new ProcessStartInfo
             {
                 FileName               = RclonePath,
-                Arguments              = "copy \"" + SourceDir + "\" \"" + destination + "\"",
+                Arguments              = "copy " + Q(SourceDir) + " " + Q(destination),
                 UseShellExecute        = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
                 CreateNoWindow         = true,
             };
 
@@ -100,13 +157,27 @@ namespace kdbxPushToRemote
             {
                 using (var process = new Process { StartInfo = psi })
                 {
+                    process.OutputDataReceived += (s, e) =>
+                    {
+                        if (e.Data != null) lock (sync) { output.AppendLine(e.Data); }
+                    };
+                    process.ErrorDataReceived += (s, e) =>
+                    {
+                        if (e.Data != null) lock (sync) { output.AppendLine(e.Data); }
+                    };
+
                     process.Start();
+                    process.BeginOutputReadLine();
+                    process.BeginErrorReadLine();
                     process.WaitForExit();
 
                     if (process.ExitCode == 0)
                         Log("Push completed to " + remote);
                     else
                         Log("Push failed to " + remote + " (exit " + process.ExitCode + ")");
+
+                    if (output.Length > 0)
+                        Log(remote + " output: " + output.ToString().TrimEnd());
                 }
             }
             catch (Exception ex)
@@ -125,6 +196,8 @@ namespace kdbxPushToRemote
                 var sb = new StringBuilder();
                 if (day != CurrentLogDay)
                 {
+                    if (CurrentLogDay.Length > 0)
+                        sb.Append(Environment.NewLine);
                     sb.Append("[").Append(day).Append("]").Append(Environment.NewLine);
                     CurrentLogDay = day;
                 }

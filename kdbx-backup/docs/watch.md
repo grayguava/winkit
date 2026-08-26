@@ -17,7 +17,8 @@ File: `bin\.watch.conf`
 | `sourceDir` | yes | - | Directory to watch for `.kdbx` files. Spaces and special characters (e.g. `&`) work fine - no quoting needed, no trailing backslash needed. |
 | `DestDir` | no | `snapshots` | Snapshot destination. Relative paths resolve against the `.exe`'s own folder. In production: `D:\Tools\kdbx-backup\databaseCopies` (absolute) or `..\..\databaseCopies` (relative). |
 | `DebounceSeconds` | no | `5` | Seconds to wait after the last filesystem event on a file before processing. Absorbs multi-event saves. |
-| `logFile` | no | `logs\watch.log` | Append-only log. In production: `..\logs\watch.log` (shared log folder at project root). |
+| `MaxSnapshotsPerHour` | no | `10` | Warn when snapshot rate exceeds this in any rolling hour. 0 disables the check. |
+| `LastKnownGoodFile` | no | `%APPDATA%\kdbxWatch\hash-history.txt` | Offline append-only hash history. Set to a path on a different drive for tamper-detection value. |
 
 Hashing is always SHA256 - it is hardcoded, not configurable. The snapshot
 manifest is always named `SHA256SUMS.txt`.
@@ -28,10 +29,12 @@ manifest is always named `SHA256SUMS.txt`.
 
 ### Startup sequence
 
-1. Acquire named mutex `Global\kdbxWatchSingleInstance`. If already
-   held → exit immediately, silently (another instance is running).
-2. Load `.watch.conf` from the `.exe`'s own directory.
-3. Create `DestDir` and `LogFile` parent directories if missing.
+1. Acquire named mutex `Local\kdbxWatchSingleInstance`. If already
+   held → log a squat warning and exit immediately.
+2. Load `.watch.conf` from the `.exe`'s own directory. Parse errors
+   or missing required keys cause a FATAL log entry and exit with
+   code 1 (Task Scheduler records the failure).
+3. Create `DestDir` and log directory if missing.
 4. Log `Started. Watching: <SourceDir>`.
 5. Call `TakeBaselineSnapshot()`.
 6. Start `FileSystemWatcher` on `SourceDir`, filter `*.kdbx`.
@@ -111,16 +114,24 @@ When `OnDebounceElapsed` fires for a file:
 2. Copy **all** `.kdbx` files from `SourceDir` into it - not just the
    triggering file. Every snapshot is a complete point-in-time backup of
    the whole set.
-3. For each copied file, hash **the copy** (not the original). This is
-   deliberate: the manifest proves what actually landed in the snapshot
-   folder, not what was in the source at the time of copy. A copy
-   corrupted in transit (disk error, AV interference) would produce a
-   different hash and be caught.
+3. For each file, hash **the source** before copy, then hash **the copy**
+   after. If the two hashes differ, the copy is retried once and a loud
+   error is logged if the mismatch persists. This catches disk errors or
+   AV interference during the copy. The manifest records the copy's hash
+   (what actually landed).
 4. Write `SHA256SUMS.txt` with `filename: hash` per line, sorted by
    filename for stable diffs.
 5. Update `LastHashes` for every file in the snapshot (not just the
    triggering file) - since the snapshot just captured all of them, the
    baseline for all should reflect the snapshot's state.
+6. Append the snapshot's hashes to the offline hash history file
+   (`LastKnownGoodFile`, default `%APPDATA%\kdbxWatch\hash-history.txt`).
+   This provides a tamper-detection baseline outside the synced tree.
+
+Before creating the snapshot, the rate limiter checks whether more than
+`MaxSnapshotsPerHour` snapshots have occurred in the last rolling hour.
+If so, a warning is logged (the snapshot is still created - data safety
+takes priority over rate concerns).
 
 ### No automatic pruning
 
@@ -133,7 +144,7 @@ cloud keeps every snapshot that ever existed locally.
 
 ## Concurrency model
 
-All mutable state (`LastHashes`, `DebounceTimers`) is guarded by a single
+All mutable state (`LastHashes`, `DebounceTimers`, `SnapshotTimes`) is guarded by a single
 `StateLock` object. `FileSystemWatcher` events fire on background threads;
 `Timer` callbacks also fire on threadpool threads. The lock ensures:
 
@@ -156,11 +167,10 @@ don't interleave partial lines in the log file.
 
 Two layers:
 
-1. **Named mutex** (`Global\kdbxWatchSingleInstance`) - checked as the
-   very first act in `Main()`, before config load or log write. A second
-   instance exits before touching anything. The mutex field is kept as a
-   static variable to prevent the GC from collecting it and releasing the
-   lock while the process runs.
+1. **Named mutex** (`Local\kdbxWatchSingleInstance`) - checked as the
+   very first act in `Main()`, before config load. A squat attempt
+   logs a warning to the default log path before exiting. Session-local
+   (`Local\`) so a different user or session isn't blocked.
 2. **Task Scheduler setting** - "If task is already running → Do not start
    a new instance." Prevents Task Scheduler itself from spawning a second
    process (e.g. on logoff/logon cycles or RDP reconnects).
@@ -194,8 +204,11 @@ Tested 2026-06-29 / 2026-07-02:
 - ✅ Two separate real edits → two separate snapshots.
 - ✅ No-op open/close in KeePassXC → no filesystem write, no log entry.
 - ✅ Source path with spaces and `&` works unquoted in `.watch.conf`.
-- ✅ Double-clicking `.exe` while already running → second instance exits
-  silently, first instance unaffected.
+- ✅ Double-clicking `.exe` while already running → second instance logs
+  squat warning and exits, first instance unaffected.
+- ✅ Config parse error (e.g. `DebounceSeconds=1O`) → FATAL log, exit 1.
+- ✅ Copy mismatch detected → retry logged, error logged if still mismatched.
+- ✅ `%APPDATA%\kdbxWatch\hash-history.txt` grows with each snapshot.
 - ✅ Restart across midnight → next log entry starts a new `[dd-MM-yyyy]`
   header block.
 - ⬜ Hash-unchanged skip - not naturally triggered by KeePassXC; only
@@ -205,7 +218,7 @@ Tested 2026-06-29 / 2026-07-02:
 
 ## Log format
 
-Append-only text file. A `[dd-MM-yyyy]` header is written the first time
+Append-only text file at `logs\watch.log` (beside `bin\`, hardcoded). A `[dd-MM-yyyy]` header is written the first time
 something is logged on a given day, and each entry is time-only
 (`hh:mm:ss tt`, no repeated date) followed by two spaces and the message:
 

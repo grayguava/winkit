@@ -13,11 +13,15 @@ namespace kdbxWatch
         private static string DestDir = "";
         private static int DebounceMs = 5000;
         private static string LogFile = "";
+        private static string LastKnownGoodFile = "";
+        private static int MaxSnapshotsPerHour = 10;
 
         private static readonly Dictionary<string, string> LastHashes =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, Timer> DebounceTimers =
             new Dictionary<string, Timer>(StringComparer.OrdinalIgnoreCase);
+        private static readonly List<DateTime> SnapshotTimes =
+            new List<DateTime>();
         private static readonly object StateLock = new object();
         private static readonly object LogLock = new object();
         private static string CurrentLogDay = "";
@@ -27,33 +31,68 @@ namespace kdbxWatch
         private static void Main()
         {
             bool isNewInstance;
-            SingleInstanceMutex = new Mutex(true, @"Global\kdbxWatchSingleInstance", out isNewInstance);
+            SingleInstanceMutex = new Mutex(true, @"Local\kdbxWatchSingleInstance", out isNewInstance);
 
             if (!isNewInstance)
             {
+                TryLog("Another instance is already running (mutex held). Exiting.");
                 return;
             }
 
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-
-            LoadConfig(Path.Combine(baseDir, ".watch.conf"), baseDir);
-            Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
-            Directory.CreateDirectory(DestDir);
-
-            Log("Started. Watching: " + SourceDir);
-
-            TakeBaselineSnapshot();
-
-            using (var watcher = new FileSystemWatcher(SourceDir, "*.kdbx"))
+            try
             {
-                watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName;
-                watcher.Changed += OnFileEvent;
-                watcher.Created += OnFileEvent;
-                watcher.Renamed += OnFileRenamed;
-                watcher.EnableRaisingEvents = true;
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-                new ManualResetEvent(false).WaitOne();
+                LoadConfig(Path.Combine(baseDir, ".watch.conf"), baseDir);
+                Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
+                Directory.CreateDirectory(DestDir);
+
+                Log("Started. Watching: " + SourceDir);
+
+                TakeBaselineSnapshot();
+
+                using (var watcher = new FileSystemWatcher(SourceDir, "*.kdbx"))
+                {
+                    watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName;
+                    watcher.InternalBufferSize = 64 * 1024;
+                    watcher.Error += OnWatcherError;
+                    watcher.Changed += OnFileEvent;
+                    watcher.Created += OnFileEvent;
+                    watcher.Renamed += OnFileRenamed;
+                    watcher.EnableRaisingEvents = true;
+
+                    new ManualResetEvent(false).WaitOne();
+                }
             }
+            catch (Exception ex)
+            {
+                TryLog("FATAL: " + ex.GetType().Name + ": " + ex.Message);
+                Environment.ExitCode = 1;
+            }
+            finally
+            {
+                SingleInstanceMutex.ReleaseMutex();
+                SingleInstanceMutex.Dispose();
+            }
+        }
+
+        private static void TryLog(string msg)
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string logDir = Path.GetFullPath(Path.Combine(baseDir, "..", "logs"));
+                Directory.CreateDirectory(logDir);
+                string fallbackLog = Path.Combine(logDir, "watch.log");
+                string time = DateTime.Now.ToString("hh:mm:ss tt");
+                File.AppendAllText(fallbackLog, time + "  " + msg + Environment.NewLine);
+            }
+            catch { }
+        }
+
+        private static void OnWatcherError(object sender, ErrorEventArgs e)
+        {
+            Log("Watcher error: " + e.GetException().Message);
         }
 
         private static void LoadConfig(string configPath, string baseDir)
@@ -74,15 +113,34 @@ namespace kdbxWatch
             }
 
             SourceDir = RequireValue(values, "sourceDir");
-            DebounceMs = (values.ContainsKey("DebounceSeconds")
-                ? int.Parse(values["DebounceSeconds"])
-                : 5) * 1000;
+
+            int secs;
+            string raw;
+            if (!values.TryGetValue("DebounceSeconds", out raw)) raw = "5";
+            if (!int.TryParse(raw, out secs) || secs < 1) secs = 5;
+            if (secs > 2000000) secs = 2000000;
+            DebounceMs = secs * 1000;
 
             string destRaw = values.ContainsKey("DestDir") ? values["DestDir"] : "snapshots";
             DestDir = Path.IsPathRooted(destRaw) ? destRaw : Path.Combine(baseDir, destRaw);
 
-            string logRaw = values.ContainsKey("logFile") ? values["logFile"] : "logs\\watch.log";
-            LogFile = Path.IsPathRooted(logRaw) ? logRaw : Path.Combine(baseDir, logRaw);
+            string logDir = Path.GetFullPath(Path.Combine(baseDir, "..", "logs"));
+            LogFile = Path.Combine(logDir, "watch.log");
+
+            int rateLimit;
+            string rateRaw;
+            if (!values.TryGetValue("MaxSnapshotsPerHour", out rateRaw) || !int.TryParse(rateRaw, out rateLimit))
+                rateLimit = MaxSnapshotsPerHour;
+            if (rateLimit < 0) rateLimit = 0;
+            MaxSnapshotsPerHour = rateLimit;
+
+            string lkgRaw = values.ContainsKey("LastKnownGoodFile") ? values["LastKnownGoodFile"] : "";
+            string lkgDefault = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "kdbxWatch", "hash-history.txt");
+            LastKnownGoodFile = string.IsNullOrEmpty(lkgRaw)
+                ? lkgDefault
+                : (Path.IsPathRooted(lkgRaw) ? lkgRaw : Path.Combine(baseDir, lkgRaw));
         }
 
         private static string RequireValue(Dictionary<string, string> values, string key)
@@ -151,6 +209,12 @@ namespace kdbxWatch
                     ScheduleDebounce(fileName);
                     return;
                 }
+                catch (UnauthorizedAccessException)
+                {
+                    Log("File access denied, rescheduling: " + fileName);
+                    ScheduleDebounce(fileName);
+                    return;
+                }
 
                 string oldHash;
                 if (LastHashes.TryGetValue(fileName, out oldHash) && oldHash == newHash)
@@ -209,6 +273,7 @@ namespace kdbxWatch
 
                 foreach (var pair in hashes) LastHashes[pair.Key] = pair.Value;
 
+                AppendHashHistory(hashes);
                 Log("Baseline snapshot created: " + snapshotDir.Substring(DestDir.Length).TrimStart(Path.DirectorySeparatorChar) + " (" + hashes.Count + " files)");
             }
         }
@@ -273,12 +338,22 @@ namespace kdbxWatch
 
         private static void TakeSnapshot()
         {
+            if (MaxSnapshotsPerHour > 0)
+            {
+                DateTime cutoff = DateTime.Now.AddHours(-1);
+                SnapshotTimes.RemoveAll(t => t < cutoff);
+                SnapshotTimes.Add(DateTime.Now);
+                if (SnapshotTimes.Count > MaxSnapshotsPerHour)
+                    Log("WARNING: " + SnapshotTimes.Count + " snapshots in the last hour - possible mass-modification event.");
+            }
+
             string snapshotDir = CreateSnapshotDir();
             Dictionary<string, string> hashes;
             int count = CopyAllKdbxFiles(snapshotDir, out hashes);
 
             foreach (var pair in hashes) LastHashes[pair.Key] = pair.Value;
 
+            AppendHashHistory(hashes);
             Log("Snapshot created: " + snapshotDir.Substring(DestDir.Length).TrimStart(Path.DirectorySeparatorChar) + " (" + count + " files)");
         }
 
@@ -303,10 +378,26 @@ namespace kdbxWatch
             {
                 string fileName = Path.GetFileName(f);
                 string dest = Path.Combine(snapshotDir, fileName);
+
+                string srcHash = null;
+                try { srcHash = ComputeHash(f); }
+                catch (IOException) { Log("Source locked during hashing, skipping integrity check: " + fileName); }
+                catch (UnauthorizedAccessException) { Log("Source access denied during hashing: " + fileName); }
+
                 File.Copy(f, dest, overwrite: true);
 
-                string hash = ComputeHash(dest);
-                hashes[fileName] = hash;
+                string copyHash = ComputeHash(dest);
+
+                if (srcHash != null && copyHash != srcHash)
+                {
+                    Log("Copy mismatch for " + fileName + ", retrying");
+                    File.Copy(f, dest, overwrite: true);
+                    copyHash = ComputeHash(dest);
+                    if (copyHash != srcHash)
+                        Log("ERROR: copy of " + fileName + " still differs from source after retry");
+                }
+
+                hashes[fileName] = copyHash;
                 count++;
             }
 
@@ -331,6 +422,26 @@ namespace kdbxWatch
             File.WriteAllText(sumsPath, sb.ToString());
         }
 
+        private static void AppendHashHistory(Dictionary<string, string> hashes)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(LastKnownGoodFile);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+                var fileNames = new List<string>(hashes.Keys);
+                fileNames.Sort(StringComparer.OrdinalIgnoreCase);
+
+                var sb = new StringBuilder();
+                sb.Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Append(Environment.NewLine);
+                foreach (string n in fileNames)
+                    sb.Append("  ").Append(n).Append(": ").Append(hashes[n]).Append(Environment.NewLine);
+
+                File.AppendAllText(LastKnownGoodFile, sb.ToString());
+            }
+            catch { }
+        }
+
         private static void Log(string message)
         {
             string day = DateTime.Now.ToString("dd-MM-yyyy");
@@ -341,6 +452,8 @@ namespace kdbxWatch
                 var sb = new StringBuilder();
                 if (day != CurrentLogDay)
                 {
+                    if (CurrentLogDay.Length > 0)
+                        sb.Append(Environment.NewLine);
                     sb.Append("[").Append(day).Append("]").Append(Environment.NewLine);
                     CurrentLogDay = day;
                 }
