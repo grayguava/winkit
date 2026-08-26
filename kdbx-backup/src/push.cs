@@ -25,6 +25,7 @@ namespace kdbxPushToRemote
 
                 LoadConfig(Path.Combine(baseDir, ".push.conf"), baseDir);
                 Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
+                InitLogDay();
 
                 if (RclonePath.IndexOf('"') >= 0)
                     throw new InvalidOperationException("RclonePath contains illegal quote character.");
@@ -184,6 +185,27 @@ namespace kdbxPushToRemote
             {
                 Log("Push failed to " + remote + " (" + ex.Message + ")");
             }
+        }
+
+        private static void InitLogDay()
+        {
+            try
+            {
+                if (!File.Exists(LogFile)) return;
+                string today = "[" + DateTime.Now.ToString("dd-MM-yyyy") + "]";
+                string[] lines = File.ReadAllLines(LogFile);
+                for (int i = lines.Length - 1; i >= 0; i--)
+                {
+                    string line = lines[i].Trim();
+                    if (line.Length == 0) continue;
+                    if (line.StartsWith("[") && line.EndsWith("]"))
+                    {
+                        if (line == today) CurrentLogDay = DateTime.Now.ToString("dd-MM-yyyy");
+                        return;
+                    }
+                }
+            }
+            catch { }
         }
 
         private static void Log(string message)

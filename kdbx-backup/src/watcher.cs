@@ -46,6 +46,7 @@ namespace kdbxWatch
                 LoadConfig(Path.Combine(baseDir, ".watch.conf"), baseDir);
                 Directory.CreateDirectory(Path.GetDirectoryName(LogFile) ?? baseDir);
                 Directory.CreateDirectory(DestDir);
+                InitLogDay();
 
                 Log("Started. Watching: " + SourceDir);
 
@@ -438,6 +439,27 @@ namespace kdbxWatch
                     sb.Append("  ").Append(n).Append(": ").Append(hashes[n]).Append(Environment.NewLine);
 
                 File.AppendAllText(LastKnownGoodFile, sb.ToString());
+            }
+            catch { }
+        }
+
+        private static void InitLogDay()
+        {
+            try
+            {
+                if (!File.Exists(LogFile)) return;
+                string today = "[" + DateTime.Now.ToString("dd-MM-yyyy") + "]";
+                string[] lines = File.ReadAllLines(LogFile);
+                for (int i = lines.Length - 1; i >= 0; i--)
+                {
+                    string line = lines[i].Trim();
+                    if (line.Length == 0) continue;
+                    if (line.StartsWith("[") && line.EndsWith("]"))
+                    {
+                        if (line == today) CurrentLogDay = DateTime.Now.ToString("dd-MM-yyyy");
+                        return;
+                    }
+                }
             }
             catch { }
         }
