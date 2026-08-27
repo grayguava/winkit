@@ -43,6 +43,11 @@ static class LogConf
         return ReadInt(tool, "logcount", 10);
     }
 
+    public static string GeneralString(string key, string defaultValue)
+    {
+        return ReadValue("General", key.ToLowerInvariant()) ?? defaultValue;
+    }
+
     static bool ReadBool(string tool, string key, bool defaultValue)
     {
         string v = ReadValue(tool, key);

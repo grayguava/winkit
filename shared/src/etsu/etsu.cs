@@ -39,6 +39,27 @@ class Etsu
 
     static bool FindExiftool()
     {
+        string configured = LogConf.GeneralString("exiftoolPATH", "null");
+
+        if (!string.Equals(configured, "null", StringComparison.OrdinalIgnoreCase)
+            && configured.IndexOf('"') >= 0)
+        {
+            Console.Error.WriteLine("exiftoolPATH contains illegal quote character.");
+            return false;
+        }
+
+        if (!string.Equals(configured, "null", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(configured))
+            {
+                Console.Error.WriteLine("exiftool not found at configured path: " + configured);
+                return false;
+            }
+            ExifPath = configured;
+            ExifVersion = RunTool(ExifPath, "-ver").Trim();
+            return true;
+        }
+
         try
         {
             string ps = RunTool("where", "exiftool.exe");

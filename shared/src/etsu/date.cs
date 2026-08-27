@@ -44,7 +44,7 @@ class DateTool
 
         Etsu.WriteSep();
 
-        Console.Write("  Enter date (YYYY:MM:DD HH:MM:SS): ");
+        Console.Write("  Enter date (DD-MM-YYYY HH:MM:SS): ");
         string dateInput = Console.ReadLine();
         if (string.IsNullOrEmpty(dateInput))
         {
@@ -52,6 +52,14 @@ class DateTool
             return 0;
         }
         dateInput = dateInput.Trim();
+
+        string exifDate;
+        if (!TryToExifDate(dateInput, out exifDate))
+        {
+            Etsu.WriteLine("[ABORT] Invalid date. Expected format: DD-MM-YYYY HH:MM:SS", ConsoleColor.Red);
+            logLines.Add("[ABORT] Invalid date input: " + dateInput);
+            return 1;
+        }
 
         logLines.Add("Target date: " + dateInput);
         Console.WriteLine();
@@ -104,14 +112,14 @@ class DateTool
         // Stage 2: set date
         Etsu.WriteStep(2, 5, "Setting date on files...", "");
         logLines.Add("");
-        logLines.Add("[2/5] Setting date: " + dateInput);
+        logLines.Add("[2/5] Setting date: " + exifDate);
 
         foreach (string file in files)
         {
             string fileName = Path.GetFileName(file);
             string tempFile = fileMap[file];
 
-            string exifArgs = "\"-AllDates=" + dateInput + "\" \"-FileModifyDate=" + dateInput + "\" \"-FileCreateDate=" + dateInput + "\" \"-overwrite_original\" \"-P\" \"" + tempFile + "\"";
+            string exifArgs = "\"-AllDates=" + exifDate + "\" \"-FileModifyDate=" + exifDate + "\" \"-FileCreateDate=" + exifDate + "\" \"-overwrite_original\" \"-P\" \"" + tempFile + "\"";
 
             var psi = new ProcessStartInfo(Etsu.ExifPath, exifArgs)
             {
@@ -229,6 +237,17 @@ class DateTool
 
         Etsu.WriteLog("date", "SUCCESS", logLines);
         return Etsu.WaitExit();
+    }
+
+    static bool TryToExifDate(string input, out string exifDate)
+    {
+        exifDate = null;
+        DateTime dt;
+        if (!DateTime.TryParseExact(input, "dd-MM-yyyy HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out dt))
+            return false;
+        exifDate = dt.ToString("yyyy:MM:dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+        return true;
     }
 
     static bool VerifyFiles(string[] files, Dictionary<string, string> fileMap, string tempDir, List<string> logLines)

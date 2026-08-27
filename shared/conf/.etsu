@@ -1,6 +1,12 @@
+# etsu configuration
 # Per-subtool log controls for etsu
 # log=true|false -> write logs/<tool>_<timestamp>.log when that subtool runs
 # logCount=N -> keep the N latest logs per subtool
+
+[General]
+# exiftoolPATH=null means "find exiftool on PATH".
+# Set to a full path if exiftool is not on PATH, e.g. C:\Tools\exiftool.exe
+exiftoolPATH=null
 
 [clean]
 log=true
