@@ -1,9 +1,16 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 
 class DownloadTool
 {
+    static string SanitizeUrl(string url)
+    {
+        if (url == null) return "";
+        return url.Replace("\"", "").Trim();
+    }
+
     public static int Run()
     {
         string baseDir = Mmu.ExeDir();
@@ -30,6 +37,7 @@ class DownloadTool
             Console.Error.WriteLine("No link provided.");
             return 1;
         }
+        url = SanitizeUrl(url);
 
         string title;
         string artist;
@@ -85,8 +93,11 @@ class DownloadTool
             using (var process = new Process { StartInfo = psi })
             {
                 process.Start();
-                string stdOut = process.StandardOutput.ReadToEnd();
+                string stdOut = null;
+                var stdoutThread = new Thread(() => { stdOut = process.StandardOutput.ReadToEnd(); });
+                stdoutThread.Start();
                 string stdErr = process.StandardError.ReadToEnd();
+                stdoutThread.Join();
                 process.WaitForExit();
 
                 if (process.ExitCode == 0)
@@ -114,9 +125,10 @@ class DownloadTool
     {
         title = null;
         artist = null;
+        string safeUrl = SanitizeUrl(url);
         try
         {
-            var psi = new ProcessStartInfo(ytDlpExe, "--no-playlist --print \"%(title)s\" --print \"%(artist)s\" \"" + url + "\"")
+            var psi = new ProcessStartInfo(ytDlpExe, "--no-playlist --print \"%(title)s\" --print \"%(artist)s\" \"" + safeUrl + "\"")
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -127,7 +139,11 @@ class DownloadTool
             using (var p = new Process { StartInfo = psi })
             {
                 p.Start();
-                string output = p.StandardOutput.ReadToEnd();
+                string output = null;
+                var stdoutThread = new Thread(() => { output = p.StandardOutput.ReadToEnd(); });
+                stdoutThread.Start();
+                p.StandardError.ReadToEnd();
+                stdoutThread.Join();
                 p.WaitForExit();
                 if (p.ExitCode == 0)
                 {
@@ -137,6 +153,9 @@ class DownloadTool
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Warning: could not fetch video info: " + ex.Message);
+        }
     }
 }

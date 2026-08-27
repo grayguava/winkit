@@ -51,6 +51,7 @@ class Mmu
         {
             if (File.Exists(configValue))
                 return Path.GetFullPath(configValue);
+            Console.Error.WriteLine("Warning: configured yt-dlp path not found: " + configValue);
             return null;
         }
 
@@ -79,7 +80,10 @@ class Mmu
                 if (File.Exists(path)) return path;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Warning: PATH scan error: " + ex.Message);
+        }
         return null;
     }
 
@@ -91,6 +95,7 @@ class Mmu
                 return Path.GetFullPath(configValue);
             if (File.Exists(configValue))
                 return Path.GetDirectoryName(Path.GetFullPath(configValue));
+            Console.Error.WriteLine("Warning: configured ffmpeg path not found: " + configValue);
             return null;
         }
 
