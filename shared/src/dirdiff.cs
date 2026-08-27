@@ -18,7 +18,7 @@ class Program {
     }
 
     [STAThread]
-    static void Main(string[] args) {
+    static int Main(string[] args) {
         string sourceRoot, destRoot;
 
         LoadConfig();
@@ -37,7 +37,7 @@ class Program {
             Console.Write("\r  Dest:        " + destRoot + "\n");
 #else
             Console.Error.WriteLine("Usage: dirdiff <source> <destination>");
-            return;
+            return 1;
 #endif
         }
 
@@ -160,8 +160,13 @@ class Program {
         Console.WriteLine("  " + HR);
         Console.WriteLine();
 
+        if (UnreadableFiles > 0) {
+            Console.WriteLine("  Note: " + UnreadableFiles + " unreadable entr" + (UnreadableFiles == 1 ? "y was" : "ies were") + " skipped.");
+            Console.WriteLine();
+        }
+
         int nIssues = missing.Count + extra.Count + sizeBad.Count + hashBad;
-        if (nIssues == 0) {
+        if (nIssues == 0 && UnreadableFiles == 0) {
             Console.WriteLine("  All " + nTotal + " files verified OK.");
         } else {
             Console.WriteLine("  Issue(s) found:");
@@ -170,7 +175,10 @@ class Program {
             if (extra.Count > 0)   Console.WriteLine("    + " + extra.Count + " items extra");
             if (sizeBad.Count > 0) Console.WriteLine("    ! " + sizeBad.Count + " items size mismatch");
             if (hashBad > 0)       Console.WriteLine("    ! " + hashBad + " items hash mismatch");
+            if (UnreadableFiles > 0) Console.WriteLine("    ? " + UnreadableFiles + " items unreadable");
         }
+
+        return nIssues == 0 ? 0 : 1;
     }
 
     static string PickFolder(string title) {
@@ -189,18 +197,50 @@ class Program {
         return null;
     }
 
+    static int UnreadableFiles;
+
     static Dictionary<string, FileEntry> BuildFileMap(string root) {
         var map = new Dictionary<string, FileEntry>();
-        foreach (string file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)) {
+        Walk(root, root, map);
+        return map;
+    }
+
+    static void Walk(string root, string dir, Dictionary<string, FileEntry> map) {
+        string[] files;
+        try {
+            files = Directory.GetFiles(dir);
+        } catch {
+            UnreadableFiles++;
+            return;
+        }
+
+        foreach (string file in files) {
             try {
                 var fi = new FileInfo(file);
                 map[file.Substring(root.Length).TrimStart('\\', '/')] = new FileEntry {
                     AbsPath = file,
                     Size    = fi.Length,
                 };
-            } catch { }
+            } catch {
+                UnreadableFiles++;
+            }
         }
-        return map;
+
+        string[] subdirs;
+        try {
+            subdirs = Directory.GetDirectories(dir);
+        } catch {
+            return;
+        }
+
+        foreach (string sub in subdirs) {
+            try {
+                if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0)
+                    continue;
+                Walk(root, sub, map);
+            } catch {
+            }
+        }
     }
 
     static void LoadConfig() {

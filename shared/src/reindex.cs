@@ -20,7 +20,13 @@ class Program
         {
             if (a == "--dry-run" || a == "-n") dryRun = true;
             else if (a == "--rollback" || a == "-r") rollback = true;
-            else if (!a.StartsWith("-")) targetDir = a;
+            else if (a.StartsWith("-"))
+            {
+                Console.Error.WriteLine("Unknown option: " + a);
+                Console.Error.WriteLine("Usage: reindex [--dry-run|-n] [--rollback|-r] [DIR]");
+                return 2;
+            }
+            else targetDir = a;
         }
 
         if (rollback)
@@ -49,7 +55,7 @@ class Program
             return 0;
         }
 
-        Array.Sort(files.ToArray(), StringComparer.OrdinalIgnoreCase);
+        files.Sort(StringComparer.OrdinalIgnoreCase);
 
         int digits = files.Count.ToString().Length;
         if (digits < 2) digits = 2;
@@ -96,7 +102,7 @@ class Program
             if (dryRun)
             {
                 Console.WriteLine();
-                Console.WriteLine("  Dry run.  " + originals.Count + " files would be renamed.");
+                Console.WriteLine("  " + originals.Count + " files would be renamed.");
             }
             else
             {
@@ -135,6 +141,14 @@ class Program
             set.Add(line);
         }
         return set;
+    }
+
+    static bool IsSafeName(string name)
+    {
+        if (name.Length == 0 || name == "." || name == "..")
+            return false;
+        return name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
+            && name.IndexOf('\\') < 0 && name.IndexOf('/') < 0;
     }
 
     static string LogsDir()
@@ -199,6 +213,13 @@ class Program
             if (line.Length == 0) continue;
             string[] parts = line.Split('\t');
             if (parts.Length != 2) continue;
+
+            if (!IsSafeName(parts[0]) || !IsSafeName(parts[1]))
+            {
+                Console.Error.WriteLine("Log file contains an unsafe filename; aborting rollback: " + logPath);
+                return 1;
+            }
+
             originals.Add(parts[0]);
             finals.Add(parts[1]);
         }
@@ -206,6 +227,19 @@ class Program
         if (originals.Count == 0)
         {
             Console.WriteLine("Nothing to roll back.");
+            return 0;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Rollback log : " + Path.GetFileName(logPath));
+        Console.WriteLine("  Directory    : " + dir);
+        Console.WriteLine("  Files        : " + originals.Count);
+        Console.WriteLine();
+        Console.Write("Proceed with rollback? [y/N] ");
+        string confirm = Console.ReadLine();
+        if (string.IsNullOrEmpty(confirm) || (confirm.Trim().ToLower() != "y" && confirm.Trim().ToLower() != "yes"))
+        {
+            Console.WriteLine("Cancelled.");
             return 0;
         }
 
@@ -247,7 +281,7 @@ class Program
             if (dryRun)
             {
                 Console.WriteLine();
-                Console.WriteLine("  Dry run.  " + finals.Count + " files would be reverted.");
+                Console.WriteLine("  " + finals.Count + " files would be reverted.");
             }
             else
             {
