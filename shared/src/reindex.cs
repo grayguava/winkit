@@ -60,6 +60,13 @@ class Program
         int digits = files.Count.ToString().Length;
         if (digits < 2) digits = 2;
 
+        if (dryRun)
+            Console.WriteLine();
+        if (dryRun)
+            Console.WriteLine("[Dry run]");
+        Console.WriteLine("Renaming files in " + targetDir);
+        Console.WriteLine();
+
         var temps = new List<string>();
         var finalNames = new List<string>();
         var originals = new List<string>();
