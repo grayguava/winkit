@@ -28,6 +28,7 @@ class Program {
             destRoot   = args[1];
         } else {
 #if WINDOWS
+            Console.WriteLine();
             Console.Write("  Source:     ");
             sourceRoot = PickFolder("SOURCE directory");
             Console.Write("\r  Source:      " + sourceRoot + "\n");
@@ -42,16 +43,9 @@ class Program {
         }
 
         Console.WriteLine();
-        Console.WriteLine("  " + new string('=', 48));
-        Console.WriteLine("  Directory Comparison Report");
-        Console.WriteLine("  " + new string('=', 48));
-        Console.WriteLine();
-
-        Console.WriteLine();
         Console.WriteLine("  " + HR);
         Console.WriteLine();
 
-        Console.WriteLine("  Scanning directories...");
         var srcMap = BuildFileMap(sourceRoot);
         var dstMap = BuildFileMap(destRoot);
 
@@ -65,64 +59,13 @@ class Program {
         int nTotal   = srcMap.Count;
         int nPresent = inBoth.Count;
 
-        Console.WriteLine();
-        Console.WriteLine("  Files present:   " + Fmt(nPresent, nTotal));
-        Console.WriteLine();
-
-        if (missing.Count > 0) {
-            Console.WriteLine("  Missing files (" + missing.Count + "):");
-            Console.WriteLine();
-            for (int i = 0; i < Math.Min(missing.Count, 20); i++)
-                Console.WriteLine("    - " + missing[i]);
-            if (missing.Count > 20)
-                Console.WriteLine("    ... and " + (missing.Count - 20) + " more");
-            Console.WriteLine();
-        }
-
-        if (extra.Count > 0) {
-            Console.WriteLine("  Extra files (" + extra.Count + "):");
-            Console.WriteLine();
-            for (int i = 0; i < Math.Min(extra.Count, 20); i++)
-                Console.WriteLine("    + " + extra[i]);
-            if (extra.Count > 20)
-                Console.WriteLine("    ... and " + (extra.Count - 20) + " more");
-            Console.WriteLine();
-        }
-
-        if (missing.Count > 0 || extra.Count > 0) {
-            Console.WriteLine("  " + HR);
-            Console.WriteLine();
-        }
-
         int sizeOk  = 0;
-        var sizeBad = new List<string>();
         foreach (var relPath in inBoth) {
             long srcSize = srcMap[relPath].Size;
             long dstSize = dstMap[relPath].Size;
             if (srcSize == dstSize)
                 sizeOk++;
-            else
-                sizeBad.Add(relPath);
         }
-
-        Console.WriteLine("  Sizes matched:   " + Fmt(sizeOk, nPresent));
-        Console.WriteLine();
-
-        if (sizeBad.Count > 0) {
-            Console.WriteLine("  Size mismatches (" + sizeBad.Count + "):");
-            for (int i = 0; i < Math.Min(sizeBad.Count, 20); i++) {
-                string rp = sizeBad[i];
-                long srcSize = srcMap[rp].Size;
-                long dstSize = dstMap[rp].Size;
-                Console.WriteLine("    ! " + rp + "  (" + srcSize + " vs " + dstSize + " bytes)");
-            }
-            if (sizeBad.Count > 20)
-                Console.WriteLine("    ... and " + (sizeBad.Count - 20) + " more");
-            Console.WriteLine();
-        }
-
-        Console.WriteLine("  " + HR);
-        Console.WriteLine();
 
         int hashOk  = 0;
         int hashBad = 0;
@@ -139,24 +82,25 @@ class Program {
                     hashOk++;
                 else
                     hashBad++;
-                Console.Write("  Computing SHA256 hashes (" + done + "/" + nHash + ")\r");
+                Console.Write("  Comparing directories... " + done + "/" + nHash + "\r");
             }
         });
-
-        Console.Write("  Computing SHA256 hashes (" + nHash + "/" + nHash + ")");
-
+        Console.Write("  Comparing directories... " + nHash + "/" + nHash);
         Console.WriteLine();
         Console.WriteLine();
-        Console.WriteLine("  Hashes matched:  " + Fmt(hashOk, nHash));
-        Console.WriteLine();
 
-        if (hashBad > 0) {
-            Console.WriteLine("  Hash mismatches (" + hashBad + "):");
-            Console.WriteLine();
-            Console.WriteLine("    (" + hashBad + " files with differing or unreadable hashes)");
-            Console.WriteLine();
+        if (nPresent == 0) {
+            Metric("Files present:", "0 / " + nTotal, "0.00%");
+            Metric("Sizes matched:", "0 / 0", "N/A");
+            Metric("Hashes matched:", "0 / 0", "N/A");
+        } else {
+            Metric("Files present:", nPresent + " / " + nTotal, Pct(nPresent, nTotal));
+            Metric("Sizes matched:", sizeOk + " / " + nPresent, Pct(sizeOk, nPresent));
+            Metric("Hashes matched:", hashOk + " / " + nHash, Pct(hashOk, nHash));
         }
-
+        Metric("Missing files:", missing.Count.ToString(), null);
+        Metric("Extra files:", extra.Count.ToString(), null);
+        Console.WriteLine();
         Console.WriteLine("  " + HR);
         Console.WriteLine();
 
@@ -165,7 +109,7 @@ class Program {
             Console.WriteLine();
         }
 
-        int nIssues = missing.Count + extra.Count + sizeBad.Count + hashBad;
+        int nIssues = missing.Count + extra.Count + (nPresent - sizeOk) + hashBad;
         if (nIssues == 0 && UnreadableFiles == 0) {
             Console.WriteLine("  All " + nTotal + " files verified OK.");
         } else {
@@ -173,7 +117,7 @@ class Program {
             Console.WriteLine();
             if (missing.Count > 0) Console.WriteLine("    - " + missing.Count + " items missing");
             if (extra.Count > 0)   Console.WriteLine("    + " + extra.Count + " items extra");
-            if (sizeBad.Count > 0) Console.WriteLine("    ! " + sizeBad.Count + " items size mismatch");
+            if (nPresent - sizeOk > 0) Console.WriteLine("    ! " + (nPresent - sizeOk) + " items size mismatch");
             if (hashBad > 0)       Console.WriteLine("    ! " + hashBad + " items hash mismatch");
             if (UnreadableFiles > 0) Console.WriteLine("    ? " + UnreadableFiles + " items unreadable");
         }
@@ -181,16 +125,22 @@ class Program {
         return nIssues == 0 ? 0 : 1;
     }
 
+    static string Pct(int n, int total) {
+        if (total == 0) return "N/A";
+        return (n * 100.0 / total).ToString("00.00") + "%";
+    }
+
+    static void Metric(string label, string value, string pct) {
+        string right = value.PadLeft(16);
+        string br = pct == null ? "" : ("  [" + pct + "]").PadLeft(10);
+        Console.WriteLine("  " + label.PadRight(17) + right + br);
+    }
+
     static string PickFolder(string title) {
-        using (var dlg = new OpenFileDialog()) {
-            dlg.Title = title;
-            dlg.CheckFileExists = false;
-            dlg.CheckPathExists = true;
-            dlg.ValidateNames = false;
-            dlg.Multiselect = false;
-            dlg.FileName = "Select this folder";
+        using (var dlg = new FolderBrowserDialog()) {
+            dlg.Description = title;
             if (dlg.ShowDialog() == DialogResult.OK)
-                return Path.GetDirectoryName(dlg.FileName);
+                return dlg.SelectedPath;
         }
         Console.WriteLine("\n  No folder selected (cancelled). Exiting.");
         Environment.Exit(1);
@@ -265,12 +215,5 @@ class Program {
         } catch {
             return null;
         }
-    }
-
-    static string Fmt(int n, int total) {
-        if (total == 0)
-            return "     0 / 0         (  N/A  )";
-        return n.ToString().PadLeft(6) + " / " + total.ToString().PadRight(6)
-            + "      (" + (n * 100.0 / total).ToString("F1") + "%)";
     }
 }
