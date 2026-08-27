@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 
 class Program {
-    static void Main(string[] args) {
+    static int Main(string[] args) {
         string root = args.Length > 0 ? args[0] : ".";
 
         string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
@@ -14,29 +14,49 @@ class Program {
         var targets = LoadTargets(configPath);
         if (targets.Count == 0) {
             Console.Error.WriteLine("No targets configured in conf/.cdirs");
-            return;
+            return 1;
         }
 
         if (!Directory.Exists(root)) {
             Console.Error.WriteLine("Directory not found: " + root);
-            return;
+            return 1;
         }
 
         root = Path.GetFullPath(root);
 
         var found = new List<string>();
+        int skipped = 0;
+        bool rootUnreadable = false;
         foreach (string target in targets) {
             try {
-                foreach (string dir in Directory.EnumerateDirectories(root, target, SearchOption.AllDirectories))
+                foreach (string dir in Directory.EnumerateDirectories(root, target, SearchOption.AllDirectories)) {
+                    if ((File.GetAttributes(dir) & FileAttributes.ReparsePoint) != 0) {
+                        Console.WriteLine("  SKIP (symlink/junction): " + dir);
+                        skipped++;
+                        continue;
+                    }
                     found.Add(dir);
-            } catch (UnauthorizedAccessException) { }
+                }
+            } catch (UnauthorizedAccessException ex) {
+                if (!rootUnreadable) Console.Error.WriteLine("Some directories skipped (no access): " + ex.Message);
+                rootUnreadable = true;
+                skipped++;
+            }
+        }
+
+        if (rootUnreadable) {
+            Console.Error.WriteLine("Warning: scan could not access part of " + root);
         }
 
         if (found.Count == 0) {
-            Console.WriteLine("No matching directories found.");
-            return;
+            if (skipped == 0)
+                Console.WriteLine("No matching directories found.");
+            else
+                Console.WriteLine("No matching directories found (" + skipped + " skipped).");
+            return 0;
         }
 
+        Console.WriteLine();
         Console.WriteLine("Found " + found.Count + " director" + (found.Count == 1 ? "y" : "ies") + ":");
         Console.WriteLine();
         foreach (string dir in found)
@@ -47,7 +67,7 @@ class Program {
         string input = Console.ReadLine();
         if (string.IsNullOrEmpty(input) || (input.Trim().ToLower() != "y" && input.Trim().ToLower() != "yes")) {
             Console.WriteLine("Cancelled.");
-            return;
+            return 0;
         }
 
         int deleted = 0;
@@ -64,6 +84,8 @@ class Program {
 
         Console.WriteLine("Deleted " + deleted + " director" + (deleted == 1 ? "y" : "ies") + "."
             + (failed > 0 ? " (" + failed + " failed)" : ""));
+
+        return failed > 0 ? 1 : 0;
     }
 
     static List<string> LoadTargets(string path) {

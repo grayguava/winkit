@@ -28,5 +28,11 @@ ext=.log,.out,.err,.trace
 [Archives]
 ext=.zip,.rar,.7z,.tar,.gz,.bz2,.xz,.zst,.lz4,.tgz,.cab,.iso,.dmg,.vhdx
 
+[Executables]
+ext=.exe,.dll,.msi,.msix,.msp,.com,.bat,.cmd,.apk,.aab,.ipa,.appimage,.deb,.rpm,.snap,.flatpak
+
 [Audio]
 ext=.mp3,.wav,.flac,.aac,.ogg,.wma,.m4a,.opus,.aiff,.ape,.dsf,.dff
+
+[Fonts]
+ext=.ttf,.otf,.woff,.woff2,.eot,.fon,.fnt

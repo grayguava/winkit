@@ -10,6 +10,7 @@ class Program
     static int _copied;
     static int _verified;
     static int _failed;
+    static bool _confError;
 
     class Category
     {
@@ -26,7 +27,13 @@ class Program
         {
             if (a == "--dry-run" || a == "-n") _dryRun = true;
             else if (a.StartsWith("--conf=")) confPath = a.Substring(7);
-            else if (!a.StartsWith("-")) targetDir = a;
+            else if (a.StartsWith("-"))
+            {
+                Console.Error.WriteLine("Unknown option: " + a);
+                Console.Error.WriteLine("Usage: catsort [--dry-run|-n] [--conf=PATH] [DIR]");
+                return 2;
+            }
+            else targetDir = a;
         }
 
         targetDir = Path.GetFullPath(targetDir);
@@ -50,14 +57,20 @@ class Program
 
         LoadConfig(confPath);
 
+        if (_confError)
+            return 1;
+
         if (_cats.Count == 0)
         {
             Console.Error.WriteLine("No categories found in config.");
             return 1;
         }
 
+        if (_dryRun)
+            Console.WriteLine();
+        if (_dryRun)
+            Console.WriteLine("[Dry run]");
         Console.WriteLine("Sorting files in " + targetDir);
-        if (_dryRun) Console.WriteLine("  (dry run)");
         Console.WriteLine();
 
         string[] files = Directory.GetFiles(targetDir);
@@ -67,7 +80,7 @@ class Program
 
         Console.WriteLine();
         if (_dryRun)
-            Console.WriteLine("  Dry run.  " + _copied + " would move.");
+            Console.WriteLine("  " + _copied + " would move.");
         else
             Console.WriteLine("  Done.  " + _copied + " copied, "
                 + _verified + " verified, " + _failed + " failed.");
@@ -86,7 +99,16 @@ class Program
 
             if (s.StartsWith("[") && s.EndsWith("]"))
             {
-                cur = new Category { Name = s.Substring(1, s.Length - 2) };
+                string name = s.Substring(1, s.Length - 2);
+                if (name.Length == 0 || name == "." || name == ".."
+                    || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                    || name.IndexOf('\\') >= 0 || name.IndexOf('/') >= 0)
+                {
+                    Console.Error.WriteLine("Config error: invalid category name '" + name + "'.");
+                    _confError = true;
+                    return;
+                }
+                cur = new Category { Name = name };
                 _cats.Add(cur);
             }
             else if (cur != null && s.StartsWith("ext=", StringComparison.OrdinalIgnoreCase))
@@ -144,10 +166,18 @@ class Program
                     return;
                 }
 
-                if (!VerifyHash(filePath, destPath))
+                string verifyErr;
+                HashResult hr = VerifyHash(filePath, destPath, out verifyErr);
+                if (hr == HashResult.Mismatch)
                 {
                     Console.WriteLine("  FAIL verify " + fileName + "  (hash mismatch)");
                     File.Delete(destPath);
+                    _failed++;
+                    return;
+                }
+                if (hr == HashResult.Error)
+                {
+                    Console.WriteLine("  FAIL verify " + fileName + "  (" + verifyErr + ") - kept copy");
                     _failed++;
                     return;
                 }
@@ -163,8 +193,11 @@ class Program
         }
     }
 
-    static bool VerifyHash(string src, string dst)
+    enum HashResult { Match, Mismatch, Error }
+
+    static HashResult VerifyHash(string src, string dst, out string err)
     {
+        err = null;
         try
         {
             using (var sha = SHA256.Create())
@@ -173,12 +206,16 @@ class Program
                 using (var s = File.OpenRead(src)) h1 = sha.ComputeHash(s);
                 using (var s = File.OpenRead(dst)) h2 = sha.ComputeHash(s);
 
-                if (h1.Length != h2.Length) return false;
+                if (h1.Length != h2.Length) return HashResult.Mismatch;
                 for (int i = 0; i < h1.Length; i++)
-                    if (h1[i] != h2[i]) return false;
-                return true;
+                    if (h1[i] != h2[i]) return HashResult.Mismatch;
+                return HashResult.Match;
             }
         }
-        catch { return false; }
+        catch (Exception ex)
+        {
+            err = ex.Message;
+            return HashResult.Error;
+        }
     }
 }
