@@ -54,7 +54,7 @@ kdbxWatch.exe (always running, event-driven)
   copies ALL .kdbx files into a new timestamped snapshot folder
         ↓
 databaseCopies/
-  MM/dd/HHmmss/              ← e.g. 08/02/122620
+  MonthName/dd/HHmm/         ← e.g. August/02/1226
     *.kdbx + SHA256SUMS.txt
         ↓
 kdbxPushToRemote.exe (scheduled, run-to-completion)
@@ -153,7 +153,7 @@ kdbx-backup/
 - **Windows-only** - `FileSystemWatcher`, named mutexes, `winexe`.
 - **rclone on PATH or configured** - `kdbxPushToRemote` needs rclone; set `RclonePath=` or ensure it's on PATH.
 - **No alerting** - monitoring is via log files only; no notification on push failure.
-- **No automatic retention** - snapshots are never pruned automatically, so local `databaseCopies/` and the cloud archive grow unbounded. Purge old local `MM/` folders manually; the cloud keeps everything.
+- **No automatic retention** - snapshots are never pruned automatically, so local `databaseCopies/` and the cloud archive grow unbounded. Purge old local `MonthName/` folders manually; the cloud keeps everything.
 - **kdbxWatch can miss rapid saves** - debouncing prevents storming, but very fast successive saves under the debounce window are coalesced into one snapshot.
 - **Logs are plain text** - they contain filenames and timestamps but no credentials. Review access controls if stored on shared volumes.
 - **Cloud archive is not tamper-resistant** - ransomware or file-corrupting malware running in your session can poison the source `.kdbx` files; the watcher will faithfully snapshot and push the corrupted copies to all three providers (append-only, no pruning). An offline hash history file (`%APPDATA%\kdbxWatch\hash-history.txt`) and snapshot rate warnings provide limited detection.

@@ -48,9 +48,10 @@ the last run *before* deciding to copy:
 
 1. Hash all `.kdbx` files currently in `SourceDir`.
 2. Read the most recent snapshot folder's `SHA256SUMS.txt` manifest. The
-   newest snapshot is found by walking the `DestDir\MM\dd\HHmmss`
-   hierarchy - each level is zero-padded, so the lexicographically last
-   entry at each level is the newest. No date parsing needed.
+   newest snapshot is found by walking the `DestDir\MonthName\dd\HHmm`
+   hierarchy - the month is the full name (alphabetical order), and `dd`/
+   `HHmm` are zero-padded, so the lexicographically last entry at each
+   level is the newest. No date parsing needed.
 3. Compare current hashes against manifest hashes.
 4. **If identical:** load hashes into memory, log "Baseline unchanged,
    skipping snapshot", do not copy. This prevents redundant duplicate
@@ -109,8 +110,8 @@ When `OnDebounceElapsed` fires for a file:
 
 `TakeSnapshot` (called while holding `StateLock`):
 
-1. Create a new folder at `DestDir\MM\dd\HHmmss` (current local date and
-   time - e.g. `databaseCopies\08\02\122620`).
+1. Create a new folder at `DestDir\MonthName\dd\HHmm` (current local
+   date and time - e.g. `databaseCopies\August\02\1226`).
 2. Copy **all** `.kdbx` files from `SourceDir` into it - not just the
    triggering file. Every snapshot is a complete point-in-time backup of
    the whole set.
@@ -136,7 +137,7 @@ takes priority over rate concerns).
 ### No automatic pruning
 
 Snapshots are never deleted automatically. Local `DestDir` and the cloud
-archive both grow unbounded - prune `DestDir\MM\` month folders manually
+archive both grow unbounded - prune `DestDir\MonthName\` month folders manually
 when they get large. There is deliberately no retention policy, so the
 cloud keeps every snapshot that ever existed locally.
 

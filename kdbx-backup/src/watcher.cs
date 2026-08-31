@@ -363,9 +363,9 @@ namespace kdbxWatch
             DateTime now = DateTime.Now;
             string fullPath = Path.Combine(
                 DestDir,
-                now.ToString("MM"),
+                now.ToString("MMMM"),
                 now.ToString("dd"),
-                now.ToString("HHmmss"));
+                now.ToString("HHmm"));
             Directory.CreateDirectory(fullPath);
             return fullPath;
         }
