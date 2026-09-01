@@ -8,72 +8,103 @@ using System.Windows.Forms;
 
 partial class Program {
     static string HR = new string('\u2500', 50);
+    static string ExeDir;
 
     [STAThread]
     static int Main(string[] args) {
         string sourceRoot, destRoot;
 
         LoadConfig();
+        LoadDirDiffConfig();
 
-        if (args.Length >= 2) {
-            sourceRoot = args[0];
-            destRoot   = args[1];
+        Console.WriteLine();
+        int srcArg = 0;
+        foreach (string a in args) {
+            if (a == "-l" || a == "--links" || a == "-L") { FollowLinks = true; srcArg++; }
+            else break;
+        }
+        if (args.Length - srcArg >= 2) {
+            sourceRoot = args[srcArg];
+            destRoot   = args[srcArg + 1];
+            Console.WriteLine("  Source:      " + sourceRoot);
+            Console.WriteLine("  Dest:        " + destRoot);
         } else {
 #if WINDOWS
-            Console.WriteLine();
-            Console.Write("  Source:     ");
+            Console.Write("  Source:      ");
+            Console.Out.Flush();
             sourceRoot = PickFolder("SOURCE directory");
-            Console.Write("\r  Source:      " + sourceRoot + "\n");
+            Console.WriteLine("\r  Source:      " + sourceRoot);
 
-            Console.Write("  Dest:       ");
+            Console.Write("  Dest:        ");
+            Console.Out.Flush();
             destRoot = PickFolder("DESTINATION directory (the copy)");
-            Console.Write("\r  Dest:        " + destRoot + "\n");
+            Console.WriteLine("\r  Dest:        " + destRoot);
 #else
             Console.Error.WriteLine("Usage: dirdiff <source> <destination>");
             return 1;
 #endif
         }
-
         Console.WriteLine();
         Console.WriteLine("  " + HR);
         Console.WriteLine();
+        Console.Out.Flush();
 
-        var srcMap = BuildFileMap(sourceRoot);
-        var dstMap = BuildFileMap(destRoot);
+        Report.Clear();
+        Report.AppendLine("  Source:      " + sourceRoot);
+        Report.AppendLine("  Dest:        " + destRoot);
+        Report.AppendLine();
+        Report.AppendLine("  " + HR);
+        Report.AppendLine();
 
         Console.Write("  Comparing directories...");
-        DiffResult r = RunDiff(srcMap, dstMap);
+        Console.Out.Flush();
+        var srcMap = BuildFileMap(sourceRoot);
+        var dstMap = BuildFileMap(destRoot);
         Console.WriteLine();
         Console.WriteLine();
+        Report.AppendLine("  Comparing directories...");
+        Report.AppendLine();
 
-        int destCount = dstMap.Count;
-        int srcCount  = srcMap.Count;
+        var prep = PrepareDiff(srcMap, dstMap);
 
-        Metric("Files present:",     destCount + " / " + srcCount,         Pct(destCount, srcCount));
-        Metric("Filenames matched:", r.DestNamesMatched.ToString("00") + " / " + srcCount, Pct(r.DestNamesMatched, srcCount));
-        Metric("Sizes matched:",     r.DestSizesMatched + " / " + srcCount, Pct(r.DestSizesMatched, srcCount));
-        Metric("Hashes matched:",    r.DestHashesMatched + " / " + r.DestHashed, Pct(r.DestHashesMatched, r.DestHashed));
+        Metric("Files present:",     prep.DstMap.Count + " / " + prep.SrcMap.Count,          Pct(prep.DstMap.Count, prep.SrcMap.Count));
+        Metric("Filenames matched:", prep.DestNamesMatched.ToString("00") + " / " + prep.SrcMap.Count, Pct(prep.DestNamesMatched, prep.SrcMap.Count));
+        Metric("Sizes matched:",     prep.DestSizesMatched + " / " + prep.SrcMap.Count,      Pct(prep.DestSizesMatched, prep.SrcMap.Count));
+
+        Console.Write(HashRow(0, prep.DstToHash.Count, true));
+        Console.Out.Flush();
+        DiffResult r = RunDiff(prep, (d, t) => {
+            Console.Write("\r" + HashRow(d, t, true));
+            Console.Out.Flush();
+        });
+        Console.Write("\r" + HashRow(r.DestHashesMatched, r.DestHashed, false));
+        Console.WriteLine();
+        Report.AppendLine(HashRow(r.DestHashesMatched, r.DestHashed, false));
+
         Metric("Missing files:",     r.Missing.ToString(), null);
         Metric("Extra files:",       r.Extra.ToString(),        null);
-        Console.WriteLine();
-        Console.WriteLine("  " + HR);
-        Console.WriteLine();
+        Line("");
 
         if (UnreadableFiles > 0) {
-            Console.WriteLine("  Note: " + UnreadableFiles + " unreadable entr" + (UnreadableFiles == 1 ? "y was" : "ies were") + " skipped.");
-            Console.WriteLine();
+            Line("  Note: " + UnreadableFiles + " unreadable entr" + (UnreadableFiles == 1 ? "y was" : "ies were") + " skipped.");
+            Line("");
         }
 
         int nIssues = r.Missing + r.Extra;
+        Line("  " + HR);
+        Line("");
         if (nIssues == 0 && UnreadableFiles == 0) {
-            Console.WriteLine("  All " + srcCount + " files verified OK.");
+            Line("  All " + prep.SrcMap.Count + " files verified OK.");
         } else {
-            Console.WriteLine("  Issue(s) found:");
-            Console.WriteLine();
-            if (r.Missing > 0) Console.WriteLine("    - " + r.Missing + " items missing");
-            if (r.Extra > 0)   Console.WriteLine("    + " + r.Extra + " items extra");
-            if (UnreadableFiles > 0) Console.WriteLine("    ? " + UnreadableFiles + " items unreadable");
+            Line("  Issue(s) found:");
+            Line("");
+            if (r.Missing > 0) Line("    - " + r.Missing + " items missing");
+            if (r.Extra > 0)   Line("    + " + r.Extra + " items extra");
+            if (UnreadableFiles > 0) Line("    ? " + UnreadableFiles + " items unreadable");
         }
+
+        WriteRunLogs(r);
+        Console.Out.Flush();
 
         return nIssues == 0 ? 0 : 1;
     }
@@ -86,7 +117,19 @@ partial class Program {
     static void Metric(string label, string value, string pct) {
         string v = value.PadLeft(12);
         string tail = (pct == null) ? v : v + (" [" + pct + "]").PadLeft(12);
-        Console.WriteLine("  " + label.PadRight(20) + tail);
+        Line("  " + label.PadRight(20) + tail);
+    }
+
+    static string HashRow(int matched, int done, bool live) {
+        string s = "  " + "Hashes matched:".PadRight(20) + (matched + " / " + done).PadLeft(12);
+        if (!live) s += (" [" + Pct(matched, done) + "]").PadLeft(12);
+        return s.PadRight(44);
+    }
+
+    static void Line(string s) {
+        Console.WriteLine(s);
+        Report.AppendLine(s);
+        Console.Out.Flush();
     }
 
     static string PickFolder(string title) {
@@ -101,10 +144,9 @@ partial class Program {
     }
 
     static void LoadConfig() {
-        string confPath = Path.Combine(
-            Path.GetDirectoryName(
-                System.Reflection.Assembly.GetExecutingAssembly().Location),
-            "..", "conf", ".thr");
+        ExeDir = Path.GetDirectoryName(
+            System.Reflection.Assembly.GetExecutingAssembly().Location);
+        string confPath = Path.Combine(ExeDir, "..", "conf", ".thr");
         if (!File.Exists(confPath)) return;
         int t;
         if (int.TryParse(File.ReadAllText(confPath).Trim(), out t) && t > 0)

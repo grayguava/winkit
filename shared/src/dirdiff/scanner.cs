@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 partial class Program {
     static int MaxThreads = 8;
     static int UnreadableFiles;
+    static bool FollowLinks;
 
     class FileEntry {
         public string RelPath;
@@ -16,11 +17,15 @@ partial class Program {
 
     static Dictionary<string, FileEntry> BuildFileMap(string root) {
         var map = new Dictionary<string, FileEntry>(StringComparer.OrdinalIgnoreCase);
-        Walk(root, root, map);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Walk(root, root, map, visited);
         return map;
     }
 
-    static void Walk(string root, string dir, Dictionary<string, FileEntry> map) {
+    static void Walk(string root, string dir, Dictionary<string, FileEntry> map, HashSet<string> visited) {
+        if (!visited.Add(dir))
+            return;
+
         string[] files;
         try {
             files = Directory.GetFiles(dir);
@@ -52,9 +57,10 @@ partial class Program {
 
         foreach (string sub in subdirs) {
             try {
-                if ((File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0)
+                bool isReparse = (File.GetAttributes(sub) & FileAttributes.ReparsePoint) != 0;
+                if (isReparse && !FollowLinks)
                     continue;
-                Walk(root, sub, map);
+                Walk(root, sub, map, visited);
             } catch {
             }
         }

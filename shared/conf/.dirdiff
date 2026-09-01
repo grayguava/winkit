@@ -1,0 +1,10 @@
+# dirdiff configuration
+# Detailed run logging writes a per-run folder under logs/dirdiff/<timestamp>/
+# containing summary.log, missingFiles.txt, and extraFiles.txt.
+
+[General]
+# log=true|false -> write a per-run log folder each time dirdiff runs
+# Run log folders always live at <exe-dir>..\logs\dirdiff, one per run.
+log=true
+# logKeep=N -> keep the N most recent run log folders, deleting the oldest
+logKeep=10
