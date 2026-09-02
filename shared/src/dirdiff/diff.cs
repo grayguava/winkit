@@ -21,6 +21,8 @@ partial class Program {
         public int DestSizesMatched;
         public int DestHashesMatched;
         public int DestHashed;
+        public int SrcUnreadable;
+        public int DestUnreadable;
         public int Missing;
         public int Extra;
         public List<string> MissingFiles = new List<string>();
@@ -65,8 +67,10 @@ partial class Program {
     }
 
     static DiffResult RunDiff(DiffPrep p, Action<int, int> progress) {
+        int srcUnreadable = 0;
         Parallel.ForEach(p.SrcToHash, new ParallelOptions { MaxDegreeOfParallelism = MaxThreads }, e => {
             e.Hash = HashFile(e.AbsPath);
+            if (e.Hash == null) { e.HashFailed = true; System.Threading.Interlocked.Increment(ref srcUnreadable); }
         });
 
         var srcHashes = new HashSet<string>(StringComparer.Ordinal);
@@ -74,6 +78,7 @@ partial class Program {
 
         var dstHashes = new HashSet<string>(StringComparer.Ordinal);
         int destMatched = 0;
+        int destUnreadable = 0;
         int done = 0;
         int total = p.DstToHash.Count;
         object sync = new object();
@@ -81,6 +86,7 @@ partial class Program {
             e.Hash = HashFile(e.AbsPath);
             lock (sync) {
                 if (e.Hash != null) dstHashes.Add(e.Hash);
+                if (e.Hash == null) { e.HashFailed = true; destUnreadable++; }
                 if (e.Hash != null && srcHashes.Contains(e.Hash)) destMatched++;
                 done++;
                 if (progress != null) progress(done, total);
@@ -90,7 +96,7 @@ partial class Program {
         int missing = 0;
         var missingFiles = new List<string>();
         foreach (var e in p.SrcMap.Values)
-            if (e.Hash == null || !dstHashes.Contains(e.Hash)) {
+            if (!e.HashFailed && !dstHashes.Contains(e.Hash)) {
                 missing++;
                 missingFiles.Add(e.RelPath);
             }
@@ -98,7 +104,7 @@ partial class Program {
         int extra = 0;
         var extraFiles = new List<string>();
         foreach (var e in p.DstMap.Values)
-            if (e.Hash == null || !srcHashes.Contains(e.Hash)) {
+            if (!e.HashFailed && !srcHashes.Contains(e.Hash)) {
                 extra++;
                 extraFiles.Add(e.RelPath);
             }
@@ -108,6 +114,8 @@ partial class Program {
             DestSizesMatched  = p.DestSizesMatched,
             DestHashesMatched = destMatched,
             DestHashed        = p.DstToHash.Count,
+            SrcUnreadable     = srcUnreadable,
+            DestUnreadable    = destUnreadable,
             Missing           = missing,
             Extra             = extra,
             MissingFiles      = missingFiles,

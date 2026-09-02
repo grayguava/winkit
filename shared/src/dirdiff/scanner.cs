@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 
 partial class Program {
     static int MaxThreads = 8;
-    static int UnreadableFiles;
     static bool FollowLinks;
 
     class FileEntry {
@@ -13,6 +12,7 @@ partial class Program {
         public string AbsPath;
         public long Size;
         public string Hash;
+        public bool HashFailed;
     }
 
     static Dictionary<string, FileEntry> BuildFileMap(string root) {
@@ -30,7 +30,6 @@ partial class Program {
         try {
             files = Directory.GetFiles(dir);
         } catch {
-            UnreadableFiles++;
             return;
         }
 
@@ -44,7 +43,6 @@ partial class Program {
                     Size    = fi.Length,
                 };
             } catch {
-                UnreadableFiles++;
             }
         }
 

@@ -68,7 +68,7 @@ partial class Program {
         var prep = PrepareDiff(srcMap, dstMap);
 
         Metric("Files present:",     prep.DstMap.Count + " / " + prep.SrcMap.Count,          Pct(prep.DstMap.Count, prep.SrcMap.Count));
-        Metric("Filenames matched:", prep.DestNamesMatched.ToString("00") + " / " + prep.SrcMap.Count, Pct(prep.DestNamesMatched, prep.SrcMap.Count));
+        Metric("Filenames matched:", prep.DestNamesMatched.ToString() + " / " + prep.SrcMap.Count, Pct(prep.DestNamesMatched, prep.SrcMap.Count));
         Metric("Sizes matched:",     prep.DestSizesMatched + " / " + prep.SrcMap.Count,      Pct(prep.DestSizesMatched, prep.SrcMap.Count));
 
         Console.Write(HashRow(0, prep.DstToHash.Count, true));
@@ -81,26 +81,23 @@ partial class Program {
         Console.WriteLine();
         Report.AppendLine(HashRow(r.DestHashesMatched, r.DestHashed, false));
 
+        Metric("Unreadable files:", r.DestUnreadable + " / " + r.SrcUnreadable, Pct(r.DestUnreadable, r.SrcUnreadable));
         Metric("Missing files:",     r.Missing.ToString(), null);
         Metric("Extra files:",       r.Extra.ToString(),        null);
         Line("");
 
-        if (UnreadableFiles > 0) {
-            Line("  Note: " + UnreadableFiles + " unreadable entr" + (UnreadableFiles == 1 ? "y was" : "ies were") + " skipped.");
-            Line("");
-        }
-
-        int nIssues = r.Missing + r.Extra;
+        int unreadable = r.SrcUnreadable + r.DestUnreadable;
+        int nIssues = r.Missing + r.Extra + unreadable;
         Line("  " + HR);
         Line("");
-        if (nIssues == 0 && UnreadableFiles == 0) {
+        if (nIssues == 0) {
             Line("  All " + prep.SrcMap.Count + " files verified OK.");
         } else {
             Line("  Issue(s) found:");
             Line("");
             if (r.Missing > 0) Line("    - " + r.Missing + " items missing");
             if (r.Extra > 0)   Line("    + " + r.Extra + " items extra");
-            if (UnreadableFiles > 0) Line("    ? " + UnreadableFiles + " items unreadable");
+            if (unreadable > 0) Line("    ? " + unreadable + " items unreadable");
         }
 
         WriteRunLogs(r);
@@ -116,14 +113,14 @@ partial class Program {
 
     static void Metric(string label, string value, string pct) {
         string v = value.PadLeft(12);
-        string tail = (pct == null) ? v : v + (" [" + pct + "]").PadLeft(12);
+        string tail = (pct == null) ? v : v + (" [" + pct + "]").PadLeft(15);
         Line("  " + label.PadRight(20) + tail);
     }
 
     static string HashRow(int matched, int done, bool live) {
         string s = "  " + "Hashes matched:".PadRight(20) + (matched + " / " + done).PadLeft(12);
-        if (!live) s += (" [" + Pct(matched, done) + "]").PadLeft(12);
-        return s.PadRight(44);
+        if (!live) s += (" [" + Pct(matched, done) + "]").PadLeft(15);
+        return s.PadRight(47);
     }
 
     static void Line(string s) {

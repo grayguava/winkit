@@ -62,10 +62,13 @@ Matching is content-aware, so it correctly recognizes *renamed* files as matches
 | `Filenames matched` | dest files whose name also exists in source |
 | `Sizes matched` | dest files whose size exists among source sizes |
 | `Hashes matched` | dest files whose hash exists among source hashes / number of size-matched files actually hashed |
-| `Missing files` | source files with no hash match in dest |
-| `Extra files` | dest files with no hash match in source |
+| `Unreadable files` | dest files that couldn't be read / source files that couldn't be read (dest / source) |
+| `Missing files` | source files with no hash match in dest (excludes unreadable) |
+| `Extra files` | dest files with no hash match in source (excludes unreadable) |
 
 Each percentage is computed from that row's own numerator/denominator. Rows are right-aligned with a fixed percentage column, so the `]` of every `[NN.NN%]` lines up regardless of whether the integer part is 1, 2, or 3 digits.
+
+`Unreadable files` counts files that exist but couldn't be hashed (locked/in-use, permission, transient IO). Unreadable files are reported here rather than as missing/extra, so a locked file is never double-counted as a real difference. The unreadable denominator can be 0, in which case the percentage shows `N/A`.
 
 #### Example output
 
@@ -78,6 +81,7 @@ Each percentage is computed from that row's own numerator/denominator. Rows are 
   Filenames matched:       00 / 42    [00.00%]
   Sizes matched:           41 / 42    [97.62%]
   Hashes matched:          41 / 41   [100.00%]
+  Unreadable files:          0 / 0       [N/A]
   Missing files:                 0
   Extra files:                   2
 
@@ -121,6 +125,7 @@ The listing in `missingFiles.txt`/`extraFiles.txt` is exactly what the summary c
 - **Content-aware matching over name-only:** Renamed files share no name between trees, so a name-only diff would report them all as missing. Matching by SHA256 hash (with a size pre-filter to limit hashing) gives the real "is this actually there" answer.
 - **Size pre-filter before hashing:** Files of different sizes can't be identical content, so only size-matched candidates are hashed. This keeps large-tree comparisons fast.
 - **Separate `report` metrics from the directory picker:** Unlike a name+identical-name diff, presence is defined by content, not path.
+- **Unreadable files get their own bucket:** a file that can't be hashed (locked by another program, permission, transient IO) is reported in `Unreadable files` and excluded from `Missing`/`Extra`, so it's never double-counted as a real difference. This keeps `missing`/`extra` meaning "verified different", not "couldn't check".
 - **Multi-file source:** split into `program.cs` (UI/report), `scanner.cs` (walk + hash), `diff.cs` (matching), and `logcfg.cs` (config + run logging) - same pattern as `mmu/` and `etsu/`, compiled together via `src\dirdiff\*.cs`.
 - **Reparse points skipped by default:** junctions/symlinks are ignored unless `-l` is passed, because following them can escape the roots, double-count, or loop. The safe default means `missing`/`extra` reflect only the actual folder contents.
 - **Run logging on via config:** controlled by `conf/.dirdiff` (`log`, `logKeep`); a normal run stays fast and quiet, and the toggle captures the actual missing/extra filenames for audit.
