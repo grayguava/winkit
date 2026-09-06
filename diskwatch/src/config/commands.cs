@@ -30,14 +30,16 @@ namespace diskwatch.config
 
         static string MakeSuffix(string args)
         {
-            string raw = args.Trim().Replace(" ", "_").Replace("\\", "-").Replace("/", "-");
-            if (raw.Length > 32)
-                raw = raw.Substring(0, 32);
-            if (string.IsNullOrEmpty(raw))
-                raw = "default";
-            if (!Regex.IsMatch(raw, @"^[A-Za-z0-9]"))
-                raw = "r" + raw;
-            return raw;
+            // Drive-letter / device extraction is the naming contract the rest of
+            // the pipeline depends on (drive keys "C"/"D", smart label "sda").
+            // The IsSafeName gate at the call site stays as backstop: anything
+            // that still isn't filename-safe is skipped instead of crashing IO.
+            var m = Regex.Match(args, @"\b([A-Za-z]):");
+            if (m.Success) return m.Groups[1].Value.ToUpperInvariant();
+            string[] parts = args.Split(' ');
+            string last = parts[parts.Length - 1];
+            int slash = last.LastIndexOfAny(new char[] { '/', '\\' });
+            return slash >= 0 ? last.Substring(slash + 1) : last;
         }
 
         static bool IsSafeName(string s)
