@@ -12,7 +12,7 @@ class Window
     {
         string logsDir = Path.GetFullPath(Path.Combine(
             Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
-            "..", "logs"));
+            "..", "logs", "runs"));
         if (!Directory.Exists(logsDir)) return null;
         var dirs = new List<string>(Directory.GetDirectories(logsDir));
         dirs.Sort();
@@ -114,9 +114,18 @@ class Window
             b.AppendLine();
         }
 
-        ShowMonospaceDialog(b.ToString(), BuildSmartText(smartState),
-            "  Diskwatch", changesDetected);
-
+        try
+        {
+            ShowMonospaceDialog(b.ToString(), BuildSmartText(smartState),
+                "  Diskwatch", changesDetected);
+        }
+        catch (Exception ex)
+        {
+            // Headless / non-interactive session (no desktop for the dialog).
+            // Files are already written and Main's exit code is decided by the
+            // caller; report the notification failure instead of crashing.
+            Console.Error.WriteLine("Warning: could not show popup (" + ex.Message + ").");
+        }
         return 0;
     }
 

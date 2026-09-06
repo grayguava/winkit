@@ -39,8 +39,11 @@ class Program
     {
         string baseDir = BaseDir();
         string logsDir = Path.GetFullPath(Path.Combine(baseDir, "..", "logs"));
-        string runDir = Path.Combine(logsDir, DateTime.Now.ToString("yyyy-MM-ddTHH-mm-ss"));
-        string runsDir = Path.Combine(runDir, "runs");
+        string runsRoot = Path.Combine(logsDir, "runs");
+        string stamp = DateTime.Now.ToString("yyyy-MM-ddTHH-mm-ss");
+        string stampDisplay = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        string runDir = Path.Combine(runsRoot, stamp);
+        string commandsDir = Path.Combine(runDir, "commands");
 
         var commands = CommandConfig.Load(Path.Combine(baseDir, ".cmds"));
         if (commands.Count == 0)
@@ -57,17 +60,17 @@ class Program
             string output;
             int code = CommandRunner.Run(cmd.Exe, cmd.Args,
                 SettingsConfig.CommandTimeoutMinutes * 60 * 1000, out output);
-            SaveRaw(runsDir, cmd.Name, code, output);
+            SaveRaw(commandsDir, cmd.Name, code, output);
         }
 
-        if (Directory.Exists(runsDir) && Directory.GetFiles(runsDir, "*.json").Length == 0)
+        if (Directory.Exists(commandsDir) && Directory.GetFiles(commandsDir, "*.json").Length == 0)
             Console.Error.WriteLine("Warning: no command produced output this run.");
 
         bool prevUnreadable;
-        MasterState prev = LoadPrevState(logsDir, runDir, out prevUnreadable);
-        var curr = MasterStateManager.Build(runsDir, smartAttrs);
+        MasterState prev = LoadPrevState(runsRoot, runDir, out prevUnreadable);
+        var curr = MasterStateManager.Build(commandsDir, smartAttrs);
         MasterStateManager.Save(Path.Combine(runDir, "result.json"), curr);
-        PruneLogs(logsDir);
+        PruneLogs(runsRoot);
 
         var changes = MasterStateManager.Diff(prev, curr);
         if (prevUnreadable)
@@ -86,6 +89,8 @@ class Program
         }
 
         bool hasImportantChange = changes.Exists(c => !c.Contains(" extra "));
+        if (SettingsConfig.SaveChanges && hasImportantChange)
+            AppendChangelog(logsDir, stampDisplay, changes);
         if (hasImportantChange)
         {
             Console.WriteLine();
@@ -128,6 +133,22 @@ class Program
         }
         unreadable = sawPrev;
         return null;
+    }
+
+    static void AppendChangelog(string logsDir, string stamp, List<string> changes)
+    {
+        try
+        {
+            Directory.CreateDirectory(logsDir);
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("[" + stamp + "]");
+            foreach (string c in changes)
+                sb.AppendLine(c);
+            sb.AppendLine();
+            File.AppendAllText(Path.Combine(logsDir, "changelog.txt"),
+                sb.ToString(), new System.Text.UTF8Encoding(false));
+        }
+        catch { }
     }
 
     static void PruneLogs(string logsDir)

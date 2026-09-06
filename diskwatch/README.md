@@ -45,7 +45,7 @@ SMART attributes to track come from `bin/.smart` in `ID=Name` format. The first 
 
 #### State and comparison
 
-Every run saves parsed state to `logs/<timestamp>/result.json`. Previous run directories are scanned backward (newest first) until a parseable baseline is found. This handles corrupted intermediate baselines gracefully. The following differences trigger a change (exit 1 + warning popup):
+Every run saves parsed state to `logs/runs/<timestamp>/result.json`. Previous run directories are scanned backward (newest first) until a parseable baseline is found. This handles corrupted intermediate baselines gracefully. The following differences trigger a change (exit 1 + warning popup):
 
 - Dirty bit toggled
 - Filesystem status changed
@@ -59,9 +59,21 @@ Extra attribute changes are tracked but never trigger a warning. If a previous b
 
 #### Raw output logging
 
-Every run also saves the raw command output to `logs/<timestamp>/runs/` (compact JSON per command). If the parser ever misinterprets a tool's output, the raw output is still there for manual inspection.
+Every run also saves the raw command output to `logs/runs/<timestamp>/commands/` (compact JSON per command). If the parser ever misinterprets a tool's output, the raw output is still there for manual inspection.
 
-Only the `logRetention` most recent timestamped run directories are kept (configurable in `.conf`, default 5, minimum 1); older runs are pruned on each execution. Non-timestamped directories and symlinks under `logs/` are never pruned.
+Only the `logRetention` most recent timestamped run directories are kept (configurable in `.conf`, default 5, minimum 1); older runs are pruned on each execution. Non-timestamped directories and symlinks under `logs/runs/` are never pruned.
+
+#### Changelog
+
+When `.conf` sets `saveChanges=true`, every run with an important change (the same condition that yields exit 1) appends a timestamped entry to `logs/changelog.txt`:
+
+```
+[2026-09-06 12:55:59]
+C: dirty False → True
+
+```
+
+Normal healthy runs append nothing, and extra-attribute-only diffs never qualify — so the file shows exactly when each important change happened. The stamp matches the run directory name, so each entry maps 1:1 to `logs/runs/<timestamp>/` while normal pruning hasn't removed it. Append-only with no retention; change lines accumulate slowly.
 
 #### Popup
 
@@ -107,6 +119,8 @@ smartctl -x /dev/sda
 warnOnly=false
 # logRetention=N -> keep the N latest scan log folders, delete older ones
 logRetention=5
+# saveChanges=true -> append important changes to logs/changelog.txt
+saveChanges=false
 # commandTimeoutMinutes=N -> kill commands that run longer than N minutes (default 60)
 commandTimeoutMinutes=60
 ```
@@ -157,7 +171,7 @@ diskwatch/
 │   ├── .cmds                ← commands to run (edit this)
 │   ├── .smart               ← SMART attr IDs and names (edit this)
 │   └── .conf               ← behavior flags
-├── logs/                    ← per-run dirs: result.json + runs/
+├── logs/                    ← runs/ (per-run dirs: result.json + commands/) + changelog.txt
 ├── popup.png                ← popup screenshot for docs
 ├── build.bat
 └── README.md                ← this document
