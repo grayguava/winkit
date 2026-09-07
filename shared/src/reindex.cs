@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 
 class Program
@@ -15,15 +16,40 @@ class Program
         string targetDir = ".";
         bool dryRun = false;
         bool rollback = false;
+        bool randomMode = false;
+        int randomLen = 32;
 
-        foreach (string a in args)
+        for (int ai = 0; ai < args.Length; ai++)
         {
+            string a = args[ai];
             if (a == "--dry-run" || a == "-n") dryRun = true;
             else if (a == "--rollback" || a == "-r") rollback = true;
+            else if (a == "-rnd")
+            {
+                randomMode = true;
+                if (ai + 1 < args.Length && IsPositiveInt(args[ai + 1]))
+                {
+                    int len;
+                    if (!int.TryParse(args[ai + 1], out len))
+                    {
+                        Console.Error.WriteLine("Invalid random name length (1-255): " + args[ai + 1]);
+                        Console.Error.WriteLine("Usage: reindex [--dry-run|-n] [--rollback|-r] [-rnd [LEN]] [DIR]");
+                        return 2;
+                    }
+                    randomLen = len;
+                    ai++;
+                }
+                if (randomLen < 1 || randomLen > 255)
+                {
+                    Console.Error.WriteLine("Invalid random name length (1-255): " + randomLen);
+                    Console.Error.WriteLine("Usage: reindex [--dry-run|-n] [--rollback|-r] [-rnd [LEN]] [DIR]");
+                    return 2;
+                }
+            }
             else if (a.StartsWith("-"))
             {
                 Console.Error.WriteLine("Unknown option: " + a);
-                Console.Error.WriteLine("Usage: reindex [--dry-run|-n] [--rollback|-r] [DIR]");
+                Console.Error.WriteLine("Usage: reindex [--dry-run|-n] [--rollback|-r] [-rnd [LEN]] [DIR]");
                 return 2;
             }
             else targetDir = a;
@@ -73,20 +99,28 @@ class Program
 
         try
         {
-            for (int i = 0; i < files.Count; i++)
+            using (RandomNumberGenerator rng = randomMode ? RandomNumberGenerator.Create() : null)
             {
-                string ext = Path.GetExtension(files[i]);
-                string finalName = (i + 1).ToString("D" + digits) + ext;
+                HashSet<string> usedNames = randomMode
+                    ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    : null;
+                for (int i = 0; i < files.Count; i++)
+                {
+                    string ext = Path.GetExtension(files[i]);
+                    string finalName = randomMode
+                        ? RandomName(randomLen, rng, usedNames) + ext
+                        : (i + 1).ToString("D" + digits) + ext;
 
-                if (Path.GetFileName(files[i]) == finalName)
-                    continue;
+                    if (Path.GetFileName(files[i]) == finalName)
+                        continue;
 
-                originals.Add(files[i]);
-                finalNames.Add(finalName);
+                    originals.Add(files[i]);
+                    finalNames.Add(finalName);
 
-                string tempName = Guid.NewGuid().ToString("N") + ".tmp";
-                string tempPath = Path.Combine(targetDir, tempName);
-                temps.Add(tempPath);
+                    string tempName = Guid.NewGuid().ToString("N") + ".tmp";
+                    string tempPath = Path.Combine(targetDir, tempName);
+                    temps.Add(tempPath);
+                }
             }
 
             for (int i = 0; i < originals.Count; i++)
@@ -133,6 +167,31 @@ class Program
         }
 
         return 0;
+    }
+
+    static bool IsPositiveInt(string s)
+    {
+        if (s == null || s.Length == 0) return false;
+        foreach (char c in s)
+            if (c < '0' || c > '9') return false;
+        return true;
+    }
+
+    const string RandomAlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+    static string RandomName(int len, RandomNumberGenerator rng, HashSet<string> used)
+    {
+        byte[] buf = new byte[len];
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            rng.GetBytes(buf);
+            var sb = new StringBuilder(len);
+            for (int i = 0; i < len; i++)
+                sb.Append(RandomAlphabet[buf[i] % RandomAlphabet.Length]);
+            if (used.Add(sb.ToString())) return sb.ToString();
+        }
+        throw new InvalidOperationException(
+            "Could not generate a unique random name; increase the length.");
     }
 
     static HashSet<string> LoadIgnore()
