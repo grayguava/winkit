@@ -51,29 +51,6 @@ class Window
         b.AppendLine(new string('\u2500', 40));
         b.AppendLine();
 
-        if (state.Drives != null)
-        {
-            foreach (var kv in state.Drives)
-            {
-                string status;
-                if (kv.Value.Dirty == true)
-                    status = "DIRTY";
-                else
-                {
-                    status = kv.Value.Filesystem;
-                    if (status == "clean") status = "Clean";
-                }
-
-                string line = "Drive " + kv.Key + ": " + status;
-                if (kv.Value.BadSectorsKb > 0)
-                    line += " | " + kv.Value.BadSectorsKb + " KB in bad sectors.";
-                else
-                    line += ".";
-                b.AppendLine(line);
-            }
-            b.AppendLine();
-        }
-
         SmartState smartState = null;
         string healthStr = "Unknown";
         if (state.Smart != null)

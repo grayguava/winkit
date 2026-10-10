@@ -9,7 +9,6 @@ public static partial class MasterStateManager
         var state = new MasterState
         {
             Timestamp = DateTime.Now.ToString("o"),
-            Drives = new Dictionary<string, DriveState>(),
             Smart = new Dictionary<string, SmartState>()
         };
 
@@ -21,16 +20,7 @@ public static partial class MasterStateManager
                 var result = LoadRaw(file);
                 if (result == null) continue;
 
-                if (name.StartsWith("fsutil_") || name.StartsWith("chkdsk_"))
-                {
-                    string letter = name.Substring(name.IndexOf('_') + 1);
-                    if (string.IsNullOrEmpty(letter)) continue;
-                    if (name.StartsWith("fsutil_"))
-                        GetOrCreateDrive(state, letter).Dirty = ParseDirty(result.Output);
-                    else
-                        ParseChkdsk(result.Output, GetOrCreateDrive(state, letter));
-                }
-                else if (name.StartsWith("smartctl_"))
+                if (name.StartsWith("smartctl_"))
                 {
                     string label = name.Substring(name.IndexOf('_') + 1);
                     state.Smart[label] = ParseSmart(result.Output, smartAttrs);
@@ -39,16 +29,5 @@ public static partial class MasterStateManager
         }
 
         return state;
-    }
-
-    static DriveState GetOrCreateDrive(MasterState state, string letter)
-    {
-        DriveState ds;
-        if (!state.Drives.TryGetValue(letter, out ds))
-        {
-            ds = new DriveState { BadSectorsKb = -1 };
-            state.Drives[letter] = ds;
-        }
-        return ds;
     }
 }

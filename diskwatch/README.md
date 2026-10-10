@@ -1,8 +1,8 @@
 ## Monitor disk health
 
 - **Source:** `diskwatch/src/` (program.cs, commandRunner.cs, config/, models/, parsers/, popup/)
-- **Dependencies:** Windows built-ins (`fsutil`, `chkdsk`) + optional `smartctl` (smartmontools)
-- **Description:** Read-only disk health monitor that runs system checks, compares results against previous state, and alerts you when something changes. Silent when healthy. Detection only - never repairs.
+- **Dependencies:** `smartctl` (smartmontools)
+- **Description:** Read-only SMART monitor that runs smartctl checks, compares results against previous state, and alerts you when something changes. Silent when healthy. Detection only - never repairs.
 
 ---
 
@@ -12,9 +12,9 @@
 diskwatch
 ```
 
-Runs all checks, prints a verdict to the console (still visible if run from a terminal), and shows a dark-themed popup with aligned monospace layout. Intended to be driven by Task Scheduler; the popup is the core output.
+Runs SMART checks, prints a verdict to the console (still visible if run from a terminal), and shows a dark-themed popup with aligned monospace layout. Intended to be driven by Task Scheduler; the popup is the core output.
 
-Admin rights are required - `fsutil`, `chkdsk`, and full `smartctl` data all need elevation.
+Admin rights are required - full `smartctl` data needs elevation.
 
 #### Exit codes
 
@@ -35,11 +35,9 @@ A named mutex (`Global\diskwatch`) prevents concurrent instances - a second laun
 
 | Check | Command | What it reports |
 |---|---|---|
-| Dirty bit | `fsutil dirty query C:` | Whether the volume dirty bit is set (means chkdsk runs at next boot) |
-| Filesystem scan | `chkdsk C: /scan` | Read-only scan of filesystem metadata; access denied, clean, problems, or bad sector count |
 | SMART | `smartctl -x /dev/sda` | Drive identity, overall health, endurance, watched attributes |
 
-The exact commands come from `bin/.cmds`, grouped by section. Only `fsutil`, `chkdsk`, and `smartctl` are accepted as executables; argument strings are sanitized against shell metacharacters. Mutating flags (e.g. `chkdsk /f`, `fsutil dirty set`, `smartctl -t`) are rejected; diskwatch never repairs, cleans, or modifies the system. Executables are resolved to absolute paths at startup (`fsutil`/`chkdsk` pinned to `%SystemRoot%\System32`; `smartctl` found via `PATH`). A per-command timeout (`commandTimeoutMinutes` in `.conf`, default 60) kills hung processes and reports them as timed out. Invalid entries are silently skipped.
+The exact commands come from `bin/.cmds`. Only `smartctl` is accepted as executable; argument strings are sanitized against shell metacharacters. Mutating flags (e.g. `smartctl -t`) are rejected; diskwatch never repairs, cleans, or modifies the system. The executable is resolved to an absolute path at startup (`smartctl` found via `PATH`). A per-command timeout (`commandTimeoutMinutes` in `.conf`, default 60) kills hung processes and reports them as timed out. Invalid entries are silently skipped.
 
 SMART attributes to track come from `bin/.smart` in `ID=Name` format. The first 5 are **important** (shown in the popup's Critical Health section, trigger warnings on change); the rest are **extras** (informational only).
 
@@ -47,19 +45,16 @@ SMART attributes to track come from `bin/.smart` in `ID=Name` format. The first 
 
 Every run saves parsed state to `logs/runs/<timestamp>/result.json`. Previous run directories are scanned backward (newest first) until a parseable baseline is found. This handles corrupted intermediate baselines gracefully. The following differences trigger a change (exit 1 + warning popup):
 
-- Dirty bit toggled
-- Filesystem status changed
-- Bad sector count changed
 - SMART health changed
 - SMART endurance changed
 - Any important SMART attribute changed
-- A previously present drive or SMART device disappeared
+- A previously present SMART device disappeared
 
 Extra attribute changes are tracked but never trigger a warning. If a previous baseline exists but none can be read, the baseline-unreadable condition is reported as an important change. If no previous run directories exist at all (first run), no changes are reported.
 
 #### Raw output logging
 
-Every run also saves the raw command output to `logs/runs/<timestamp>/commands/` (compact JSON per command). If the parser ever misinterprets a tool's output, the raw output is still there for manual inspection.
+Every run also saves the raw command output to `logs/runs/<timestamp>/smartctl_*.json` (compact JSON per command, alongside `result.json`). If the parser ever misinterprets a tool's output, the raw output is still there for manual inspection.
 
 Only the `logRetention` most recent timestamped run directories are kept (configurable in `.conf`, default 5, minimum 1); older runs are pruned on each execution. Non-timestamped directories and symlinks under `logs/runs/` are never pruned.
 
@@ -69,7 +64,7 @@ When `.conf` sets `saveChanges=true`, every run with an important change (the sa
 
 ```
 [2026-09-06 12:55:59]
-C: dirty False → True
+sda: health PASSED → FAILED
 
 ```
 
@@ -88,16 +83,9 @@ A dim Extra button opens the full categorized SMART breakdown in the same window
 
 #### Configuration
 
-`bin/.cmds` - commands to run, grouped by section:
+`bin/.cmds` - commands to run:
 
 ```ini
-[fsutil]
-fsutil dirty query C:
-fsutil dirty query D:
-
-[chkdsk]
-chkdsk C: /scan
-
 [smartctl]
 smartctl -x /dev/sda
 ```
@@ -129,7 +117,7 @@ commandTimeoutMinutes=60
 
 ### Design decisions
 
-- **Read-only:** diskwatch never repairs, cleans, or modifies the system. Automated repair (DISM, SFC, chkdsk /f) can cause more damage than it fixes when triggered without human judgment. The tool's job is to tell you something changed - you decide what to do.
+- **Read-only:** diskwatch never repairs, cleans, or modifies the system. The tool's job is to tell you something changed - you decide what to do.
 - **Change detection over logging:** logging every run creates noise; most runs are identical. Change detection suppresses the common case and surfaces deltas. The exit code makes it scriptable.
 - **Raw output preserved:** if the parser misinterprets a tool's output (new Windows version, locale differences), the raw output is still available for manual inspection.
 - **Static device list over auto-detection:** auto-detecting drives via WMI adds complexity and can miss devices. A static config list is simpler and more predictable.
@@ -140,7 +128,7 @@ commandTimeoutMinutes=60
 
 ### References
 
-- [smartmontools](https://www.smartmontools.org/) - provides `smartctl` (optional but required for SMART checks)
+- [smartmontools](https://www.smartmontools.org/) - provides `smartctl` (required)
 
 ---
 
@@ -156,12 +144,11 @@ diskwatch/
 │   │   ├── smartattrs.cs    ← .smart loading
 │   │   └── settings.cs      ← .conf loading
 │   ├── models/
-│   │   ├── state.cs         ← DriveState, SmartState, MasterState
+│   │   ├── state.cs         ← SmartState, MasterState
 │   │   └── persistence.cs   ← load/save/diff, JSON mapping
 │   ├── parsers/
 │   │   ├── conf.cs          ← shared config reader
 │   │   ├── build.cs         ← run directory → MasterState
-│   │   ├── chkdsk.cs        ← fsutil + chkdsk parsing
 │   │   └── smartctl.cs      ← smartctl parsing
 │   └── popup/
 │       ├── window.cs        ← popup dialog (main/extra views)
@@ -171,7 +158,7 @@ diskwatch/
 │   ├── .cmds                ← commands to run (edit this)
 │   ├── .smart               ← SMART attr IDs and names (edit this)
 │   └── .conf               ← behavior flags
-├── logs/                    ← runs/ (per-run dirs: result.json + commands/) + changelog.txt
+├── logs/                    ← runs/ (per-run dirs: result.json + smartctl_*.json) + changelog.txt
 ├── popup.png                ← popup screenshot for docs
 ├── build.bat
 └── README.md                ← this document
@@ -181,10 +168,10 @@ diskwatch/
 
 ### Known limitations
 
-- **Admin required** - without elevation, `fsutil` reports Access Denied, `chkdsk` cannot scan, and `smartctl` may show limited data.
-- **Windows-only** - uses `fsutil`, `chkdsk`, and `smartctl`.
-- **smartctl optional but manual** - install and configure it in `.cmds` if you want SMART checks; not bundled.
-- **No drive discovery** - every drive must be configured in `.cmds` and SMART attrs in `.smart`.
+- **Admin required** - without elevation, `smartctl` may show limited data.
+- **Windows-only** - uses `smartctl`.
+- **smartctl manual** - install and configure it in `.cmds`; not bundled.
+- **No drive discovery** - every device must be configured in `.cmds` and SMART attrs in `.smart`.
 - **No daemon mode** - use Task Scheduler for periodic runs.
-- **Locale-sensitive parsing** - `chkdsk` and `smartctl` output varies by system locale. The parser handles English output; other locales may cause attributes to be skipped (raw output preserved in `runs/` for manual inspection).
+- **Locale-sensitive parsing** - `smartctl` output varies by system locale. The parser handles English output; other locales may cause attributes to be skipped (raw output preserved in `runs/` for manual inspection).
 - **Read-only is enforced, not guaranteed** - mutating flags in `.cmds` are rejected, but the tool cannot prevent a user from editing `.cmds` to add repair commands. The README documents the intended read-only contract.

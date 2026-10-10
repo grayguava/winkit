@@ -43,7 +43,6 @@ class Program
         string stamp = DateTime.Now.ToString("yyyy-MM-ddTHH-mm-ss");
         string stampDisplay = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         string runDir = Path.Combine(runsRoot, stamp);
-        string commandsDir = Path.Combine(runDir, "commands");
 
         var commands = CommandConfig.Load(Path.Combine(baseDir, ".cmds"));
         if (commands.Count == 0)
@@ -60,15 +59,15 @@ class Program
             string output;
             int code = CommandRunner.Run(cmd.Exe, cmd.Args,
                 SettingsConfig.CommandTimeoutMinutes * 60 * 1000, out output);
-            SaveRaw(commandsDir, cmd.Name, code, output);
+            SaveRaw(runDir, cmd.Name, code, output);
         }
 
-        if (Directory.Exists(commandsDir) && Directory.GetFiles(commandsDir, "*.json").Length == 0)
+        if (Directory.Exists(runDir) && Directory.GetFiles(runDir, "smartctl_*.json").Length == 0)
             Console.Error.WriteLine("Warning: no command produced output this run.");
 
         bool prevUnreadable;
         MasterState prev = LoadPrevState(runsRoot, runDir, out prevUnreadable);
-        var curr = MasterStateManager.Build(commandsDir, smartAttrs);
+        var curr = MasterStateManager.Build(runDir, smartAttrs);
         MasterStateManager.Save(Path.Combine(runDir, "result.json"), curr);
         PruneLogs(runsRoot);
 
@@ -76,12 +75,6 @@ class Program
         if (prevUnreadable)
             changes.Insert(0, "baseline: previous report(s) could not be read");
 
-        foreach (var kv in curr.Drives)
-        {
-            string icon = kv.Value.Filesystem == "clean" ? "\u2713" : "!";
-            Console.WriteLine("  " + icon + " " + kv.Key + ": " + kv.Value.Filesystem
-                + (kv.Value.BadSectorsKb > 0 ? "  bad sectors " + kv.Value.BadSectorsKb + " KB" : ""));
-        }
         foreach (var kv in curr.Smart)
         {
             Console.WriteLine("  \u2713 " + kv.Key + "  " + kv.Value.Health

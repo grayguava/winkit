@@ -23,8 +23,8 @@ Each tool is standalone and portable - a single `.exe` compiled with Windows' bu
 #### [diskwatch](diskwatch/README.md)
 
 - **Source:** `diskwatch/src/` (multi-file: config/, models/, parsers/, popup/)
-- **Dependencies:** Windows built-ins + optional smartctl
-- **Description:** Read-only disk health monitor with change detection and popup alerts. Silent when healthy; flags changes with exit code + popup.
+- **Dependencies:** smartctl (smartmontools)
+- **Description:** Read-only SMART monitor with change detection and popup alerts. Silent when healthy; flags changes with exit code + popup.
 
 #### [batcap](batcap/README.md)
 

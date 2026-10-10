@@ -1,12 +1,4 @@
-# commands to run, grouped by section
-
-[fsutil]
-fsutil dirty query C:
-fsutil dirty query D:
-
-[chkdsk]
-chkdsk C: /scan
-chkdsk D: /scan
+# commands to run
 
 [smartctl]
 smartctl -x /dev/sda

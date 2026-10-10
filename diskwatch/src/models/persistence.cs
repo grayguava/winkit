@@ -30,27 +30,6 @@ public static partial class MasterStateManager
     {
         var changes = new List<string>();
         if (prev == null) return changes;
-        if (prev.Drives == null || curr.Drives == null) return changes;
-
-        foreach (var kv in curr.Drives)
-        {
-            DriveState pd;
-            if (!prev.Drives.TryGetValue(kv.Key, out pd))
-            {
-                changes.Add(kv.Key + ": new drive");
-                continue;
-            }
-            DriveState cd = kv.Value;
-            if (pd.Dirty != cd.Dirty)
-                changes.Add(kv.Key + ": dirty " + pd.Dirty + " \u2192 " + cd.Dirty);
-            if (pd.Filesystem != cd.Filesystem)
-                changes.Add(kv.Key + ": filesystem " + pd.Filesystem + " \u2192 " + cd.Filesystem);
-            if (pd.BadSectorsKb != cd.BadSectorsKb)
-                changes.Add(kv.Key + ": bad sectors " + pd.BadSectorsKb + " \u2192 " + cd.BadSectorsKb);
-        }
-        foreach (var kv in prev.Drives)
-            if (!curr.Drives.ContainsKey(kv.Key))
-                changes.Add(kv.Key + ": drive disappeared");
 
         if (prev.Smart != null && curr.Smart != null)
         {
@@ -199,16 +178,6 @@ public static partial class MasterStateManager
         var s = new MasterState();
         if (d == null) return s;
         s.Timestamp = AsString(d, "timestamp");
-        if (d.ContainsKey("drives"))
-        {
-            var dd = d["drives"] as Dictionary<string, object>;
-            if (dd != null)
-            {
-                s.Drives = new Dictionary<string, DriveState>();
-                foreach (var kv in dd)
-                    s.Drives[kv.Key] = MapDrive(kv.Value as Dictionary<string, object>);
-            }
-        }
         if (d.ContainsKey("smart"))
         {
             var sd = d["smart"] as Dictionary<string, object>;
@@ -220,16 +189,6 @@ public static partial class MasterStateManager
             }
         }
         return s;
-    }
-
-    static DriveState MapDrive(Dictionary<string, object> d)
-    {
-        var ds = new DriveState();
-        if (d == null) return ds;
-        if (d.ContainsKey("dirty")) ds.Dirty = d["dirty"] as bool?;
-        ds.Filesystem = AsString(d, "filesystem");
-        if (d.ContainsKey("badSectorsKb")) ds.BadSectorsKb = AsLong(d["badSectorsKb"], 0);
-        return ds;
     }
 
     static SmartState MapSmart(Dictionary<string, object> d)
@@ -277,27 +236,8 @@ public static partial class MasterStateManager
         var sb = new System.Text.StringBuilder();
         sb.Append("{\r\n");
         sb.Append("  \"timestamp\": " + EscapeJsonString(s.Timestamp) + ",\r\n");
-        sb.Append("  \"drives\": {\r\n");
-        bool first = true;
-        if (s.Drives != null)
-        {
-            foreach (var kv in s.Drives)
-            {
-                if (!first) sb.Append(",\r\n");
-                first = false;
-                sb.Append("    " + EscapeJsonString(kv.Key) + ": {\r\n");
-                sb.Append("      \"dirty\": ");
-                if (kv.Value.Dirty == null) sb.Append("null");
-                else sb.Append(((bool)kv.Value.Dirty) ? "true" : "false");
-                sb.Append(",\r\n");
-                sb.Append("      \"filesystem\": " + EscapeJsonString(kv.Value.Filesystem) + ",\r\n");
-                sb.Append("      \"badSectorsKb\": " + kv.Value.BadSectorsKb + "\r\n");
-                sb.Append("    }");
-            }
-        }
-        sb.Append("\r\n  },\r\n");
         sb.Append("  \"smart\": {\r\n");
-        first = true;
+        bool first = true;
         if (s.Smart != null)
         {
             foreach (var kv in s.Smart)

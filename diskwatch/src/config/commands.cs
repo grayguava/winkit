@@ -13,7 +13,7 @@ namespace diskwatch.config
 
     static class CommandConfig
     {
-        static readonly string[] _allowed = { "chkdsk", "fsutil", "smartctl" };
+        static readonly string[] _allowed = { "smartctl" };
 
         static bool IsAllowedExe(string bare)
         {
@@ -50,16 +50,7 @@ namespace diskwatch.config
         static bool HasMutatingFlag(string exe, string args)
         {
             string low = " " + args.ToLowerInvariant() + " ";
-            if (exe == "chkdsk")
-            {
-                foreach (string flag in new[] { "/f", "/r", "/x", "/spotfix", "/offlinescanandfix", "/b" })
-                    if (low.Contains(" " + flag + " ")) return true;
-            }
-            else if (exe == "fsutil")
-            {
-                if (low.Contains(" dirty set ") || low.Contains(" usn deletejournal")) return true;
-            }
-            else if (exe == "smartctl")
+            if (exe == "smartctl")
             {
                 if (low.Contains(" -t ") || low.Contains(" --test ")) return true;
                 if (low.Contains(" -s ") || low.Contains(" --set ")) return true;
@@ -69,13 +60,6 @@ namespace diskwatch.config
 
         static string ResolveExe(string bare)
         {
-            if (bare == "fsutil" || bare == "chkdsk")
-            {
-                string sysPath = Path.Combine(
-                    System.Environment.SystemDirectory,
-                    bare + ".exe");
-                return File.Exists(sysPath) ? sysPath : null;
-            }
             if (bare == "smartctl")
             {
                 string pathVar =

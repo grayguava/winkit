@@ -1,12 +1,5 @@
 using System.Collections.Generic;
 
-public class DriveState
-{
-    public bool? Dirty;
-    public string Filesystem;
-    public long BadSectorsKb;
-}
-
 public class SmartState
 {
     public string Model;
@@ -21,6 +14,5 @@ public class SmartState
 public class MasterState
 {
     public string Timestamp;
-    public Dictionary<string, DriveState> Drives;
     public Dictionary<string, SmartState> Smart;
 }
